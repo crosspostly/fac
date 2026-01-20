@@ -1,0 +1,14 @@
+<phpunit bootstrap="tests/bootstrap.php" colors="true">
+    <testsuites>
+        <testsuite name="Unit Tests">
+            <directory suffix=".php" phpVersion="5.3.3" phpVersionOperator=">=">tests/Unit</directory>
+        </testsuite>
+    </testsuites>
+    <filter>
+        <blacklist>
+            <directory>./vendor</directory>
+            <directory>./utils</directory>
+            <file>./src/Exceptions/Exception.php</file>
+        </blacklist>
+    </filter>
+</phpunit>

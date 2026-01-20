@@ -1,0 +1,31 @@
+# Secrets
+*.env
+rutube_cookies.json
+tiktok_cookies.txt
+config.py
+insta_tok/tiktok_cookies.txt
+insta_tok/.env
+
+# Logs
+*.log
+experiment_log.md
+*.png
+
+# Python
+__pycache__/
+venv/
+*.pyc
+
+# System
+.DS_Store
+
+# Large Media
+*.mp4
+*.mp3
+uploads/
+downloads/
+test_video.mp4
+test_video_*.mp4
+
+# Allow Database (We want to sync this!)
+!sync_db.sqlite

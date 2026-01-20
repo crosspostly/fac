@@ -1,0 +1,51 @@
+[
+  {
+    "timestamp": "2026-01-07T04:58:13.761293",
+    "method": "REFERENCE_URL",
+    "url": "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    "status": "DELETED",
+    "details_snippet": "{\"status_code\": \"DELETED\", \"data\": {\"id\": \"0bd2b390cc197f6972731b0e2c2404f9\", \"title\": \"[TEST-REFERENCE_URL] 2026-01-07 04:58\", \"description\": \"Test upload strategy: REFERENCE_URL\", \"thumbnail_url\": \""
+  },
+  {
+    "timestamp": "2026-01-07T04:58:24.690496",
+    "method": "LOCAL_WEBHOOK_PARAM",
+    "url": "https://crosspostly.hopto.org/rutube-webhook/webhook?file=test_video.mp4",
+    "status": "DELETED",
+    "details_snippet": "{\"status_code\": \"DELETED\", \"data\": {\"id\": \"d1cfbdcbaed3754c5b17149cda9e0c40\", \"title\": \"[TEST-LOCAL_WEBHOOK_PARAM] 2026-01-07 04:58\", \"description\": \"Test upload strategy: LOCAL_WEBHOOK_PARAM\", \"thumb"
+  },
+  {
+    "timestamp": "2026-01-07T04:58:35.536431",
+    "method": "LOCAL_STATIC_PATH",
+    "url": "https://crosspostly.hopto.org/rutube-webhook/static/test_video.mp4",
+    "status": "DELETED",
+    "details_snippet": "{\"status_code\": \"DELETED\", \"data\": {\"id\": \"747a28b94eef850c42794ebbda19dd91\", \"title\": \"[TEST-LOCAL_STATIC_PATH] 2026-01-07 04:58\", \"description\": \"Test upload strategy: LOCAL_STATIC_PATH\", \"thumbnail"
+  },
+  {
+    "timestamp": "2026-01-07T04:58:40.575567",
+    "method": "EXTERNAL_TRANSFER_SH",
+    "url": "N/A",
+    "status": "ERROR",
+    "details_snippet": "Failed to generate URL"
+  },
+  {
+    "timestamp": "2026-01-07T05:00:10.894841",
+    "method": "REFERENCE_URL_HTTPS",
+    "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    "status": "DELETED",
+    "details_snippet": "{\"status_code\": \"DELETED\", \"data\": {\"id\": \"419f60338463f08570d8e55f49669b28\", \"title\": \"[TEST-REFERENCE_URL_HTTPS] 2026-01-07 05:00\", \"description\": \"Test upload strategy: REFERENCE_URL_HTTPS\", \"thumb"
+  },
+  {
+    "timestamp": "2026-01-07T05:00:24.726754",
+    "method": "LOCAL_WEBHOOK_PARAM",
+    "url": "https://crosspostly.hopto.org/rutube-webhook/webhook?file=test_video.mp4",
+    "status": "DELETED",
+    "details_snippet": "{\"status_code\": \"DELETED\", \"data\": {\"id\": \"ba4dc838db57a5f27e989216de701485\", \"title\": \"[TEST-LOCAL_WEBHOOK_PARAM] 2026-01-07 05:00\", \"description\": \"Test upload strategy: LOCAL_WEBHOOK_PARAM\", \"thumb"
+  },
+  {
+    "timestamp": "2026-01-07T05:00:35.725465",
+    "method": "LOCAL_STATIC_PATH",
+    "url": "https://crosspostly.hopto.org/rutube-webhook/static/test_video.mp4",
+    "status": "DELETED",
+    "details_snippet": "{\"status_code\": \"DELETED\", \"data\": {\"id\": \"67d746b295c69ac9cea56e71db1b8253\", \"title\": \"[TEST-LOCAL_STATIC_PATH] 2026-01-07 05:00\", \"description\": \"Test upload strategy: LOCAL_STATIC_PATH\", \"thumbnail"
+  }
+]

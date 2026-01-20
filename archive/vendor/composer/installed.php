@@ -1,0 +1,41 @@
+<?php return array(
+    'root' => array(
+        'name' => '__root__',
+        'pretty_version' => '1.0.0+no-version-set',
+        'version' => '1.0.0.0',
+        'reference' => null,
+        'type' => 'library',
+        'install_path' => __DIR__ . '/../../',
+        'aliases' => array(),
+        'dev' => true,
+    ),
+    'versions' => array(
+        '__root__' => array(
+            'pretty_version' => '1.0.0+no-version-set',
+            'version' => '1.0.0.0',
+            'reference' => null,
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../../',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'nategood/httpful' => array(
+            'pretty_version' => '0.2.19',
+            'version' => '0.2.19.0',
+            'reference' => 'bd73f89d34d8f879c54ac46eb94b0f7be1d00820',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../nategood/httpful',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'rutube/php-api-client' => array(
+            'pretty_version' => '1.0.12',
+            'version' => '1.0.12.0',
+            'reference' => '01dd4d8f4e802cff6f1557bfa1440aa8080cd61f',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../rutube/php-api-client',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+    ),
+);

@@ -1,0 +1,32 @@
+{
+  "name": "rutube/php-api-client",
+  "keywords": [
+    "rutube",
+    "sdk",
+    "api",
+    "client"
+  ],
+  "description": "PHP client for Rutube api (http://rutube.ru)",
+  "type": "library",
+  "authors": [
+    {
+      "name": "Rutube Team"
+    }
+  ],
+  "license": "Apache 2.0",
+  "require": {
+    "php": ">=5.3.3",
+    "nategood/httpful": "0.2.19"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "4.5.*",
+    "brianium/paratest": "0.12.*"
+  },
+  "autoload": {
+    "psr-4": {"Rutube\\": "src/"}
+  },
+  "scripts": {
+    "test": "vendor/bin/paratest -f tests/ --colors",
+    "coverage-html": "vendor/bin/paratest -f tests/ --coverage-html ./coverage --colors"
+  }
+}

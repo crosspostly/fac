@@ -1,0 +1,124 @@
+{
+    "_readme": [
+        "This file locks the dependencies of your project to a known state",
+        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
+        "This file is @generated automatically"
+    ],
+    "content-hash": "2382a61ec17874f04f1f8a3e0ce2c60c",
+    "packages": [
+        {
+            "name": "nategood/httpful",
+            "version": "0.2.19",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/nategood/httpful.git",
+                "reference": "bd73f89d34d8f879c54ac46eb94b0f7be1d00820"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/nategood/httpful/zipball/bd73f89d34d8f879c54ac46eb94b0f7be1d00820",
+                "reference": "bd73f89d34d8f879c54ac46eb94b0f7be1d00820",
+                "shasum": ""
+            },
+            "require": {
+                "ext-curl": "*",
+                "php": ">=5.3"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "*"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-0": {
+                    "Httpful": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Nate Good",
+                    "email": "me@nategood.com",
+                    "homepage": "http://nategood.com"
+                }
+            ],
+            "description": "A Readable, Chainable, REST friendly, PHP HTTP Client",
+            "homepage": "http://github.com/nategood/httpful",
+            "keywords": [
+                "api",
+                "curl",
+                "http",
+                "requests",
+                "rest",
+                "restful"
+            ],
+            "support": {
+                "issues": "https://github.com/nategood/httpful/issues",
+                "source": "https://github.com/nategood/httpful/tree/v0.2.19"
+            },
+            "time": "2015-03-08T15:22:23+00:00"
+        },
+        {
+            "name": "rutube/php-api-client",
+            "version": "1.0.12",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/rutube/php-api-client.git",
+                "reference": "01dd4d8f4e802cff6f1557bfa1440aa8080cd61f"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/rutube/php-api-client/zipball/01dd4d8f4e802cff6f1557bfa1440aa8080cd61f",
+                "reference": "01dd4d8f4e802cff6f1557bfa1440aa8080cd61f",
+                "shasum": ""
+            },
+            "require": {
+                "nategood/httpful": "0.2.19",
+                "php": ">=5.3.3"
+            },
+            "require-dev": {
+                "brianium/paratest": "0.12.*",
+                "phpunit/phpunit": "4.5.*"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Rutube\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "Apache 2.0"
+            ],
+            "authors": [
+                {
+                    "name": "Rutube Team"
+                }
+            ],
+            "description": "PHP client for Rutube api (http://rutube.ru)",
+            "keywords": [
+                "api",
+                "client",
+                "rutube",
+                "sdk"
+            ],
+            "support": {
+                "issues": "https://github.com/rutube/php-api-client/issues",
+                "source": "https://github.com/rutube/php-api-client/tree/master"
+            },
+            "abandoned": true,
+            "time": "2015-07-03T12:57:57+00:00"
+        }
+    ],
+    "packages-dev": [],
+    "aliases": [],
+    "minimum-stability": "stable",
+    "stability-flags": {},
+    "prefer-stable": false,
+    "prefer-lowest": false,
+    "platform": {},
+    "platform-dev": {},
+    "plugin-api-version": "2.6.0"
+}

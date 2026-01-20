@@ -1,0 +1,4 @@
+tiktok-uploader>=1.0.0
+requests>=2.25.1
+selenium>=4.0.0
+instagrapi>=1.17.0

@@ -1,0 +1,71 @@
+name: Rutube Sync Bot
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'  # Run every 3 hours
+  workflow_dispatch:       # Allow manual run button
+
+permissions:
+  contents: write          # Allow committing back to repo
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+
+    - name: Install System Dependencies (FFmpeg & Browsers)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+
+    - name: Install Python Dependencies
+      run: |
+        pip install -r requirements.txt
+        playwright install chromium
+        playwright install-deps
+
+    - name: Restore Secrets (Config & Cookies)
+      env:
+        RUTUBE_COOKIES: ${{ secrets.RUTUBE_COOKIES_JSON }}
+        TIKTOK_COOKIES: ${{ secrets.TIKTOK_COOKIES_TXT }}
+        CONFIG_PY: ${{ secrets.CONFIG_PY }}
+      run: |
+        echo "$RUTUBE_COOKIES" > rutube_cookies.json
+        echo "$TIKTOK_COOKIES" > tiktok_cookies.txt
+        # Also put tiktok cookies in subfolder if needed by legacy scripts
+        cp tiktok_cookies.txt insta_tok/tiktok_cookies.txt
+        
+        # Restore config.py
+        echo "$CONFIG_PY" > config.py
+
+    - name: Patch TikTok Uploader
+      run: |
+        # Apply the fix for TikTok selectors
+        python3 insta_tok/apply_patch.py
+
+    - name: Run Sync
+      run: |
+        python3 sync_production.py
+
+    - name: Commit and Push DB changes
+      run: |
+        git config --global user.name "Rutube Bot Action"
+        git config --global user.email "bot@github.com"
+        
+        # Check if DB changed
+        if [[ -n $(git status -s sync_db.sqlite) ]]; then
+          echo "Changes detected in DB. Committing..."
+          git add sync_db.sqlite
+          git commit -m "🤖 Sync: Update database [skip ci]"
+          git push
+        else
+          echo "No changes in DB."
+        fi

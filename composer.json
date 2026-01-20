@@ -1,0 +1,5 @@
+{
+    "require": {
+        "rutube/php-api-client": "^1.0"
+    }
+}
