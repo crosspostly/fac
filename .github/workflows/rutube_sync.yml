@@ -8,6 +8,16 @@ on:
 permissions:
   contents: write          # Allow committing back to repo
 
+name: Rutube Sync Bot
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'  # Run every 3 hours
+  workflow_dispatch:       # Allow manual run button
+
+permissions:
+  contents: write          # Allow committing back to repo
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -22,8 +32,16 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: '3.13'
+        cache: 'pip' # ⚡ Cache pip dependencies automatically
 
-    - name: Install System Dependencies (FFmpeg & Browsers)
+    - name: Cache Playwright Browsers
+      uses: actions/cache@v3
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
+
+    - name: Install System Dependencies (FFmpeg)
       run: |
         sudo apt-get update
         sudo apt-get install -y ffmpeg
@@ -31,6 +49,7 @@ jobs:
     - name: Install Python Dependencies
       run: |
         pip install -r requirements.txt
+        # Install browsers only if not cached or ensure they exist
         playwright install chromium
         playwright install-deps
 
@@ -50,12 +69,37 @@ jobs:
 
     - name: Patch TikTok Uploader
       run: |
-        # Apply the fix for TikTok selectors
         python3 insta_tok/apply_patch.py
 
-    - name: Run Sync
+    - name: Run Sync with Self-Healing
+      id: run_sync
       run: |
+        set +e # Don't exit immediately on error
+        
+        echo "🚀 Attempt 1: Running Sync..."
         python3 sync_production.py
+        EXIT_CODE=$?
+        
+        if [ $EXIT_CODE -ne 0 ]; then
+          echo "⚠️ Attempt 1 failed (Exit Code: $EXIT_CODE)."
+          echo "♻️ Triggering Self-Healing: Force reinstalling dependencies..."
+          
+          # Force reinstall libs
+          pip install --force-reinstall --no-cache-dir -r requirements.txt
+          playwright install chromium --force
+          python3 insta_tok/apply_patch.py
+          
+          echo "🚀 Attempt 2: Retrying Sync after cleanup..."
+          python3 sync_production.py
+          EXIT_CODE=$?
+        fi
+        
+        if [ $EXIT_CODE -ne 0 ]; then
+          echo "❌ Attempt 2 failed. Giving up."
+          exit $EXIT_CODE
+        else
+          echo "✅ Sync successful."
+        fi
 
     - name: Upload Debug Screenshots (On Failure)
       if: failure()
@@ -65,7 +109,30 @@ jobs:
         path: "*.png"
         retention-days: 3
 
+    - name: Notify Telegram on Failure
+      if: failure() && secrets.TELEGRAM_TOKEN != '' && secrets.TELEGRAM_TO != ''
+      run: |
+        MESSAGE="🚨 *Rutube Bot Failed!* %0A%0AThe sync process crashed after 2 attempts. Check GitHub Actions logs for details and screenshots."
+        curl -s -X POST https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage \
+        -d chat_id=${{ secrets.TELEGRAM_TO }} \
+        -d text="$MESSAGE" \
+        -d parse_mode="Markdown"
+
     - name: Commit and Push DB changes
+      if: success() # Only push if sync worked
+      run: |
+        git config --global user.name "Rutube Bot Action"
+        git config --global user.email "bot@github.com"
+        
+        # Check if DB changed
+        if [[ -n $(git status -s sync_db.sqlite) ]]; then
+          echo "Changes detected in DB. Committing..."
+          git add sync_db.sqlite
+          git commit -m "🤖 Sync: Update database [skip ci]"
+          git push
+        else
+          echo "No changes in DB."
+        fi
       run: |
         git config --global user.name "Rutube Bot Action"
         git config --global user.email "bot@github.com"
