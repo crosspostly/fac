@@ -107,7 +107,17 @@ def process_video(y_id, title, description, token):
     
     # Скачивание (только видео)
     if not os.path.exists(local_video_path):
-        subprocess.run([YT_DLP_PATH, "-f", "best[ext=mp4]", "-o", f"{local_file_base}.%(ext)s", f"https://youtube.com/watch?v={y_id}"])
+        # Add cookies if available
+        yt_cmd = [YT_DLP_PATH, "-f", "best[ext=mp4]", "-o", f"{local_file_base}.%(ext)s"]
+        if os.path.exists("youtube_cookies.txt"):
+             yt_cmd.extend(["--cookies", "youtube_cookies.txt"])
+        yt_cmd.append(f"https://youtube.com/watch?v={y_id}")
+        
+        subprocess.run(yt_cmd)
+
+    if not os.path.exists(local_video_path):
+        log(f"❌ Ошибка: Файл не скачался (YouTube block?). Пропускаем загрузку.")
+        return False
 
     # --- EXTERNAL UPLOAD (Catbox) ---
     def upload_to_catbox(path):
