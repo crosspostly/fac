@@ -58,7 +58,9 @@ def download_video(y_id):
     log(f"⬇️ Downloading video {y_id}...")
     file_base = os.path.join(DOWNLOAD_DIR, y_id)
     # Output template: id.mp4
-    cmd = [YT_DLP_PATH, "-f", "best[ext=mp4]", "-o", f"{file_base}.%(ext)s", f"https://youtube.com/watch?v={y_id}"]
+    cmd = [YT_DLP_PATH, "-f", "best[ext=mp4]"]
+    if os.path.exists("../youtube_cookies.txt"): cmd.insert(1, "--cookies"); cmd.insert(2, "../youtube_cookies.txt")
+    # OLD: cmd = [YT_DLP_PATH, "-f", "best[ext=mp4]", "-o", f"{file_base}.%(ext)s", f"https://youtube.com/watch?v={y_id}"]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode == 0:
         video_path = f"{file_base}.mp4"

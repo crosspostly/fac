@@ -91,7 +91,11 @@ def wait_for_processing(video_id, token, max_retries=120, delay=5):
 def get_full_video_info(y_id):
     """Fetches full video metadata including full description."""
     try:
-        cmd = [YT_DLP_PATH, "--dump-json", f"https://youtube.com/watch?v={y_id}"]
+        if os.path.exists("youtube_cookies.txt"): cmd = [YT_DLP_PATH, "--cookies", "youtube_cookies.txt", "--dump-json"]
+        else: cmd = [YT_DLP_PATH, "--dump-json"], f"https://youtube.com/watch?v={y_id}"]
+        if os.path.exists("youtube_cookies.txt"):
+             cmd.extend(["--cookies", "youtube_cookies.txt"])
+        
         res = subprocess.run(cmd, capture_output=True, text=True)
         if res.returncode == 0:
             return json.loads(res.stdout)
@@ -212,7 +216,8 @@ def sync():
         return
 
     # Простая проверка последних видео
-    cmd = [YT_DLP_PATH, "--dump-json", "--flat-playlist", "--playlist-end", "5", YOUTUBE_CHANNEL_URL]
+    if os.path.exists("youtube_cookies.txt"): cmd = [YT_DLP_PATH, "--cookies", "youtube_cookies.txt", "--dump-json"]
+        else: cmd = [YT_DLP_PATH, "--dump-json"], "--flat-playlist", "--playlist-end", "5", YOUTUBE_CHANNEL_URL]
     res = subprocess.run(cmd, capture_output=True, text=True)
     
     videos = []
