@@ -57,14 +57,13 @@ jobs:
       env:
         RUTUBE_COOKIES: ${{ secrets.RUTUBE_COOKIES_JSON }}
         TIKTOK_COOKIES: ${{ secrets.TIKTOK_COOKIES_TXT }}
+        YT_COOKIES: ${{ secrets.YOUTUBE_COOKIES_TXT }}
         CONFIG_PY: ${{ secrets.CONFIG_PY }}
       run: |
         echo "$RUTUBE_COOKIES" > rutube_cookies.json
         echo "$TIKTOK_COOKIES" > tiktok_cookies.txt
-        # Also put tiktok cookies in subfolder if needed by legacy scripts
+        echo "$YT_COOKIES" > youtube_cookies.txt
         cp tiktok_cookies.txt insta_tok/tiktok_cookies.txt
-        
-        # Restore config.py
         echo "$CONFIG_PY" > config.py
 
     - name: Patch TikTok Uploader
@@ -124,12 +123,15 @@ jobs:
         git config --global user.name "Rutube Bot Action"
         git config --global user.email "bot@github.com"
         
+        # Pull latest changes to avoid out-of-sync errors
+        git pull --rebase origin main
+        
         # Check if DB changed
         if [[ -n $(git status -s sync_db.sqlite) ]]; then
           echo "Changes detected in DB. Committing..."
           git add sync_db.sqlite
           git commit -m "🤖 Sync: Update database [skip ci]"
-          git push
+          git push origin main
         else
           echo "No changes in DB."
         fi
