@@ -11,6 +11,8 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: 1
 
     steps:
     - name: Checkout code
@@ -54,6 +56,14 @@ jobs:
     - name: Run Sync
       run: |
         python3 sync_production.py
+
+    - name: Upload Debug Screenshots (On Failure)
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-screenshots
+        path: "*.png"
+        retention-days: 3
 
     - name: Commit and Push DB changes
       run: |
