@@ -186,7 +186,7 @@ jobs:
 
     - name: Upload metadata cache
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: cache-metadata
         path: video_metadata_cache.json
@@ -194,7 +194,7 @@ jobs:
 
     - name: Upload Debug Info (On Failure)
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: debug-info
         path: |
