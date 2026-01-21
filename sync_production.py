@@ -6,6 +6,7 @@ import time
 import datetime
 import json
 import sqlite3
+import shutil
 import config
 
 # Import social uploader
@@ -31,9 +32,19 @@ PASSWORD = config.RUTUBE_PASSWORD
 PUBLIC_DOMAIN = config.PUBLIC_IP
 PORT = config.SERVER_PORT
 YOUTUBE_CHANNEL_URL = config.YOUTUBE_CHANNEL_URL
-YT_DLP_PATH = config.YT_DLP_PATH
 UPLOADS_DIR = config.UPLOADS_DIR
 DB_FILE = config.DB_FILE
+
+# Resolve yt-dlp path
+YT_DLP_PATH = config.YT_DLP_PATH
+if not os.path.exists(YT_DLP_PATH) or not os.access(YT_DLP_PATH, os.X_OK):
+    print(f"⚠️ Configured YT_DLP_PATH '{YT_DLP_PATH}' is not valid.")
+    system_yt = shutil.which("yt-dlp")
+    if system_yt:
+        print(f"✅ Using system yt-dlp: {system_yt}")
+        YT_DLP_PATH = system_yt
+    else:
+        print("❌ CRITICAL: No yt-dlp found!")
 
 def log(msg):
     print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
@@ -99,6 +110,8 @@ def get_full_video_info(y_id):
         res = subprocess.run(cmd, capture_output=True, text=True)
         if res.returncode == 0:
             return json.loads(res.stdout)
+        else:
+            log(f"⚠️ Ошибка получения полной инфо (get_full_video_info) для {y_id}: {res.stderr}")
     except Exception as e:
         log(f"⚠️ Ошибка получения полной информации о видео: {e}")
     return None
@@ -222,10 +235,18 @@ def sync():
     cmd.append(YOUTUBE_CHANNEL_URL)
     
     res = subprocess.run(cmd, capture_output=True, text=True)
+
+    if res.returncode != 0:
+        log(f"❌ Ошибка исполнения YT-DLP (Exit Code: {res.returncode})")
+        log(f"📝 Stderr: {res.stderr}")
     
     videos = []
-    for line in res.stdout.strip().split("\n"):
-        if line: videos.append(json.loads(line))
+    try:
+        for line in res.stdout.strip().split("\n"):
+            if line: videos.append(json.loads(line))
+    except json.JSONDecodeError as e:
+        log(f"❌ Ошибка парсинга JSON от yt-dlp: {e}")
+        log(f"📄 Полученный stdout: {res.stdout}")
     
     # 1. Проверяем top-5
     for vid in videos:
@@ -244,7 +265,11 @@ def sync():
 
     # Если мы здесь, значит все top-5 уже синхронизированы.
     if not videos:
-        log("⚠️ Не найдено видео на канале.")
+        log("⚠️ Не найдено видео на канале (список пуст).")
+        if res.returncode != 0:
+             log("ℹ️ Возможная причина: ошибка yt-dlp (см. логи выше).")
+        elif not res.stdout.strip():
+             log("ℹ️ yt-dlp вернул пустой результат. Возможно, канал пуст или заблокирован для этого IP.")
         return
 
     # 2. Проверяем дату самого свежего видео
