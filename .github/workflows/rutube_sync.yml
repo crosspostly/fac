@@ -26,6 +26,24 @@ jobs:
         python-version: '3.13'
         cache: 'pip' # ⚡ Cache pip dependencies automatically
 
+    - name: Cache deno binary
+      uses: actions/cache@v3
+      id: deno-cache
+      with:
+        path: ~/.deno
+        key: ${{ runner.os }}-deno-${{ hashFiles('**/deno.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-deno-
+
+    - name: Install deno (if not cached)
+      if: steps.deno-cache.outputs.cache-hit != 'true'
+      run: |
+        curl -fsSL https://deno.land/x/install/install.sh | sh
+        echo "$HOME/.deno/bin" >> $GITHUB_PATH
+
+    - name: Verify deno installation
+      run: deno --version
+
     - name: Cache Playwright Browsers
       uses: actions/cache@v3
       id: playwright-cache
@@ -58,11 +76,21 @@ jobs:
         cp tiktok_cookies.txt insta_tok/tiktok_cookies.txt
         echo "$CONFIG_PY" > config.py
 
+    - name: Verify YouTube Cookies
+      run: |
+        if [ ! -f youtube_cookies.txt ] || [ ! -s youtube_cookies.txt ]; then
+          echo "⚠️ WARNING: youtube_cookies.txt is missing or empty!"
+          echo "YouTube will require authentication. This sync may fail."
+          echo "To fix: Export YouTube cookies and update YOUTUBE_COOKIES_TXT secret."
+        else
+          echo "✅ YouTube cookies found and loaded"
+        fi
+
     - name: Patch TikTok Uploader
       run: |
         python3 insta_tok/apply_patch.py
 
-    - name: Run Sync with Self-Healing
+    - name: Run Sync with Self-Healing (Cached Dependencies)
       id: run_sync
       run: |
         set +e # Don't exit immediately on error
@@ -73,9 +101,13 @@ jobs:
         
         if [ $EXIT_CODE -ne 0 ]; then
           echo "⚠️ Attempt 1 failed (Exit Code: $EXIT_CODE)."
-          echo "♻️ Triggering Self-Healing: Force reinstalling dependencies..."
+          echo "♻️ Triggering Self-Healing: Clearing caches and reinstalling..."
           
-          # Force reinstall libs
+          # Clear caches but keep deno/playwright where possible
+          pip cache purge
+          rm -rf ~/.cache/pip
+          
+          # Force reinstall only Python packages (not system deps)
           pip install --force-reinstall --no-cache-dir -r requirements.txt
           playwright install chromium --force
           python3 insta_tok/apply_patch.py
@@ -111,7 +143,7 @@ jobs:
           exit 0
         fi
         
-        MESSAGE="🚨 *Rutube Bot Failed!* %0A%0AThe sync process crashed after 2 attempts. Check GitHub Actions logs for details and screenshots."
+        MESSAGE="🚨 *Rutube Bot Failed!* %0A%0AThe sync process crashed after 2 attempts. Check GitHub Actions logs for details. Common issues:%0A• YouTube cookies expired%0A• GitHub Actions IP blocked%0A• Network timeout"
         curl -s -X POST https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage \
         -d chat_id=$TELEGRAM_TO \
         -d text="$MESSAGE" \
@@ -123,16 +155,16 @@ jobs:
         git config --global user.name "Rutube Bot Action"
         git config --global user.email "bot@github.com"
         
-        # Check if DB changed
-        if [[ -n $(git status -s sync_db.sqlite) ]]; then
-          echo "Changes detected in DB. Committing..."
-          git add sync_db.sqlite
-          git commit -m "🤖 Sync: Update database [skip ci]"
+        # Check if DB or cache changed
+        if [[ -n $(git status -s sync_db.sqlite) ]] || [[ -n $(git status -s video_metadata_cache.json) ]]; then
+          echo "Changes detected in DB/Cache. Committing..."
+          git add sync_db.sqlite video_metadata_cache.json 2>/dev/null || true
+          git commit -m "🤖 Sync: Update database and cache [skip ci]" 2>/dev/null || true
           
-          # Pull latest changes to avoid out-of-sync errors (rebase on top of our new commit)
+          # Pull latest changes to avoid out-of-sync errors
           git pull --rebase origin main
           
           git push origin main
         else
-          echo "No changes in DB."
+          echo "No changes in DB/Cache."
         fi
