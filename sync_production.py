@@ -297,7 +297,7 @@ def sync():
     token = get_auth_token()
     if not token: 
         log("❌ Не удалось получить токен API")
-        return
+        return False
 
     # Простая проверка последних видео
     cmd = [YT_DLP_PATH, "--dump-json", "--flat-playlist", "--playlist-end", "5"]
@@ -310,6 +310,7 @@ def sync():
     if res.returncode != 0:
         log(f"❌ Ошибка исполнения YT-DLP (Exit Code: {res.returncode})")
         log(f"📝 Stderr: {res.stderr[:300]}")
+        return False
     
     videos = []
     try:
@@ -317,6 +318,7 @@ def sync():
             if line: videos.append(json.loads(line))
     except json.JSONDecodeError as e:
         log(f"❌ Ошибка парсинга JSON: {e}")
+        return False
     
     # 1. Проверяем top-5
     for vid in videos:
@@ -332,15 +334,15 @@ def sync():
                 description = vid.get('description', '')
                 log(f"⚠️ Using fallback metadata for {y_id}")
             
-            process_video(y_id, title, description, token)
+            result = process_video(y_id, title, description, token)
             # Save cache after processing
             save_metadata_cache(metadata_cache)
-            return
+            return result
 
     # Если мы здесь, значит все top-5 уже синхронизированы.
     if not videos:
         log("⚠️ Не найдено видео на канале (список пуст).")
-        return
+        return True
 
     # 2. Проверяем дату самого свежего видео
     most_recent_date = None
@@ -389,9 +391,9 @@ def sync():
                     title = vid.get('title')
                     description = vid.get('description', '')
                 
-                process_video(y_id, title, description, token)
+                result = process_video(y_id, title, description, token)
                 save_metadata_cache(metadata_cache)
-                return
+                return result
         
         log("✅ Все видео из последних 50 уже синхронизированы.")
     else:
@@ -399,6 +401,12 @@ def sync():
     
     # Save cache before exit
     save_metadata_cache(metadata_cache)
+    return True
 
 if __name__ == "__main__":
-    sync()
+    success = sync()
+    if success is False:
+        log("❌ Sync finished with errors.")
+        sys.exit(1)
+    log("✅ Sync finished successfully.")
+    sys.exit(0)

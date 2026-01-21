@@ -237,6 +237,10 @@ jobs:
           echo "✅ No changes to commit"
         else
           git commit -m "🤖 Sync update [skip ci]"
+          
+          # Fix: Stash any lingering unstaged changes (logs, temp files) to allow rebase
+          git stash --include-untracked || true
+          
           git pull --rebase origin main
           git push origin main
         fi
