@@ -18,34 +18,53 @@ jobs:
       with:
         python-version: '3.13'
     
-    - name: Cache playwright browsers
+    - name: Generate cache key
+      id: cache-key
+      run: echo "key=playwright-${{ runner.os }}-$(date +%Y%m%d)" >> $GITHUB_OUTPUT
+    
+    - name: Cache playwright browsers (with fast hit)
+      id: cache-browsers
       uses: actions/cache@v4
       with:
         path: /home/runner/.cache/ms-playwright
-        key: ${{ runner.os }}-playwright-cookies
+        key: ${{ steps.cache-key.outputs.key }}
         restore-keys: |
-          ${{ runner.os }}-playwright-
+          playwright-${{ runner.os }}-
     
     - name: Install dependencies
       run: |
+        pip install --upgrade pip
         pip install playwright
         playwright install chromium
         playwright install-deps
     
     - name: Refresh YouTube cookies
-      env:
-        YOUTUBE_EMAIL: ${{ secrets.YOUTUBE_EMAIL }}
-        YOUTUBE_PASSWORD: ${{ secrets.YOUTUBE_PASSWORD }}
+      id: refresh
       run: python refresh_youtube_cookies.py
+      continue-on-error: true
+    
+    - name: Check if refresh failed due to outdated cache
+      if: steps.refresh.outcome == 'failure' && steps.cache-browsers.outputs.cache-hit == 'true'
+      run: |
+        echo "Refresh failed with cached browsers, clearing cache..."
+        rm -rf /home/runner/.cache/ms-playwright
+    
+    - name: Retry install and refresh (after cache clear)
+      if: steps.refresh.outcome == 'failure' && steps.cache-browsers.outputs.cache-hit == 'true'
+      run: |
+        echo "Reinstalling Playwright..."
+        playwright install chromium
+        playwright install-deps
+        python refresh_youtube_cookies.py
     
     - name: Verify cookies file
       run: |
         if [ -f youtube_cookies_new.txt ]; then
           LINES=$(wc -l < youtube_cookies_new.txt)
-          echo "Cookies file created: $LINES lines"
-          head -5 youtube_cookies_new.txt
+          echo "✅ Cookies file created: $LINES lines"
+          head -3 youtube_cookies_new.txt
         else
-          echo "ERROR: Cookies file not found"
+          echo "❌ ERROR: Cookies file not found"
           exit 1
         fi
     
@@ -55,12 +74,12 @@ jobs:
         GH_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
         if [ -z "$GH_TOKEN" ]; then
-          echo "WARNING: PAT_TOKEN not set, skipping secret update"
-          echo "Cookies are available in artifacts for manual update"
+          echo "⚠️  PAT_TOKEN not set, skipping secret update"
+          echo "📦 Cookies are available in artifacts for manual update"
           exit 0
         fi
         gh secret set YOUTUBE_COOKIES_TXT < youtube_cookies_new.txt
-        echo "GitHub Secret updated successfully"
+        echo "✅ GitHub Secret updated successfully"
     
     - name: Upload cookies backup
       if: always()
@@ -79,7 +98,7 @@ jobs:
         if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_TO" ]; then
           curl -s -X POST https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage \
             -d chat_id=$TELEGRAM_TO \
-            -d text="YouTube cookies refreshed successfully (check artifacts)"
+            -d text="✅ YouTube cookies refreshed successfully"
         fi
     
     - name: Notify Telegram Failure
@@ -89,7 +108,7 @@ jobs:
         TELEGRAM_TO: ${{ secrets.TELEGRAM_TO }}
       run: |
         if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_TO" ]; then
-          curl -s -X POST https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage \
+          curl -s -X POST https://api.github.com/repos/crosspostly/fac/git/commits \
             -d chat_id=$TELEGRAM_TO \
-            -d text="YouTube cookies refresh FAILED"
+            -d text="❌ YouTube cookies refresh FAILED"
         fi
