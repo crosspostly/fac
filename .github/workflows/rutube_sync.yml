@@ -121,14 +121,15 @@ jobs:
         git config --global user.name "Rutube Bot Action"
         git config --global user.email "bot@github.com"
         
-        # Pull latest changes to avoid out-of-sync errors
-        git pull --rebase origin main
-        
         # Check if DB changed
         if [[ -n $(git status -s sync_db.sqlite) ]]; then
           echo "Changes detected in DB. Committing..."
           git add sync_db.sqlite
           git commit -m "🤖 Sync: Update database [skip ci]"
+          
+          # Pull latest changes to avoid out-of-sync errors (rebase on top of our new commit)
+          git pull --rebase origin main
+          
           git push origin main
         else
           echo "No changes in DB."
