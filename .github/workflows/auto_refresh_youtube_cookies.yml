@@ -5,11 +5,6 @@ on:
     - cron: '0 0 * * 0'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  actions: write
-  secrets: write
-
 jobs:
   refresh:
     runs-on: ubuntu-latest
@@ -57,10 +52,15 @@ jobs:
     - name: Update GitHub Secret
       if: success()
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
+        if [ -z "$GH_TOKEN" ]; then
+          echo "WARNING: PAT_TOKEN not set, skipping secret update"
+          echo "Cookies are available in artifacts for manual update"
+          exit 0
+        fi
         gh secret set YOUTUBE_COOKIES_TXT < youtube_cookies_new.txt
-        echo "GitHub Secret updated"
+        echo "GitHub Secret updated successfully"
     
     - name: Upload cookies backup
       if: always()
@@ -79,7 +79,7 @@ jobs:
         if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_TO" ]; then
           curl -s -X POST https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage \
             -d chat_id=$TELEGRAM_TO \
-            -d text="YouTube cookies refreshed successfully"
+            -d text="YouTube cookies refreshed successfully (check artifacts)"
         fi
     
     - name: Notify Telegram Failure
