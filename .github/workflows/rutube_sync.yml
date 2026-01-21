@@ -48,7 +48,6 @@ jobs:
       with:
         packages: ffmpeg
         version: 1.0
-      continue-on-error: true
 
     - name: Cache Playwright browsers (CRITICAL)
       uses: actions/cache@v3
@@ -66,57 +65,48 @@ jobs:
         key: ${{ runner.os }}-ytdlp-cache-${{ github.run_number }}
         restore-keys: |
           ${{ runner.os }}-ytdlp-cache-
-      continue-on-error: true
 
-    - name: Cache pip packages (AGGRESSIVE)
+    - name: Setup pip cache config
       run: |
         mkdir -p ~/.cache/pip-cache
         mkdir -p ~/.config/pip
         echo "[global]" > ~/.config/pip/pip.conf
         echo "cache-dir = ~/.cache/pip-cache" >> ~/.config/pip/pip.conf
-        echo "no-deps = false" >> ~/.config/pip/pip.conf
-      continue-on-error: true
+
+    # ========== DENO SETUP ==========
 
     - name: Setup deno (if not cached)
       if: steps.deno-cache.outputs.cache-hit != 'true'
       run: |
         curl -fsSL https://deno.land/x/install/install.sh | sh
         echo "$HOME/.deno/bin" >> $GITHUB_PATH
-      continue-on-error: true
 
-    - name: Setup deno PATH
+    - name: Add deno to PATH
       run: echo "$HOME/.deno/bin" >> $GITHUB_PATH
-      continue-on-error: true
 
-    - name: Verify deno
-      run: deno --version 2>/dev/null || echo "⚠️ Deno not available, yt-dlp will use fallback"
-      continue-on-error: true
+    # ========== PYTHON DEPENDENCIES ==========
 
-    - name: Install Python dependencies (use cache)
+    - name: Install Python dependencies
       run: |
-        pip install --prefer-binary -r requirements.txt 2>&1 | head -20
+        pip install --prefer-binary -r requirements.txt
 
-    - name: Install Playwright browsers
+    # ========== PLAYWRIGHT SETUP (REAL FIX) ==========
+    # Problem: "playwright" CLI command wasn't available after pip install
+    # Solution: Use "python -m playwright" which always works
+
+    - name: Install Playwright Chromium
       run: |
-        playwright install chromium
-        sudo playwright install-deps chromium || true
-      continue-on-error: true
+        python -m playwright install chromium
 
-    - name: Verify Playwright installation
+    - name: Install Playwright system dependencies
       run: |
-        python3 -c "from playwright.sync_api import sync_playwright; print('✅ Playwright OK')" || echo "⚠️ Playwright may have issues"
-      continue-on-error: true
+        sudo python -m playwright install-deps chromium
 
-    - name: Cache system libraries
-      uses: actions/cache@v3
-      with:
-        path: /home/runner/.local
-        key: ${{ runner.os }}-local-libs-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-local-libs-
-      continue-on-error: true
+    - name: Verify Playwright
+      run: |
+        python -c "from playwright.sync_api import sync_playwright; print('✅ Playwright OK')"
 
-    # ========== AGGRESSIVE CACHING END ==========
+    # ========== CACHING END ==========
 
     - name: Restore Secrets (Config & Cookies)
       env:
@@ -129,7 +119,7 @@ jobs:
         echo "$TIKTOK_COOKIES" > tiktok_cookies.txt
         echo "$YT_COOKIES" > youtube_cookies.txt
         mkdir -p insta_tok
-        cp tiktok_cookies.txt insta_tok/tiktok_cookies.txt 2>/dev/null || true
+        cp tiktok_cookies.txt insta_tok/tiktok_cookies.txt
         echo "$CONFIG_PY" > config.py
 
     - name: Pre-flight check
@@ -141,18 +131,15 @@ jobs:
         echo ""
         echo "📚 Dependency versions:"
         python --version
-        yt-dlp --version 2>/dev/null || echo "⚠️ yt-dlp: not in PATH"
-        deno --version 2>/dev/null || echo "⚠️ deno: not available"
-        playwright --version 2>/dev/null || echo "⚠️ playwright CLI: not available"
+        pip show yt-dlp | grep Version
+        pip show playwright | grep Version
+        deno --version 2>/dev/null || echo "⚠️ deno: not available (optional)"
 
     - name: Patch TikTok Uploader
       run: |
         if [ -f "insta_tok/apply_patch.py" ]; then
           python3 insta_tok/apply_patch.py
-        else
-          echo "⚠️ Patch file not found, skipping"
         fi
-      continue-on-error: true
 
     - name: Run Sync with 2-attempt Self-Healing
       id: run_sync
@@ -160,38 +147,41 @@ jobs:
         set +e
         
         echo "🚀 [Attempt 1/2] Running sync_production.py..."
-        timeout 300 python3 sync_production.py 2>&1 | tee /tmp/sync.log
+        python3 sync_production.py 2>&1 | tee /tmp/sync_attempt1.log
         EXIT_CODE=$?
         
         if [ $EXIT_CODE -ne 0 ]; then
           echo ""
           echo "⚠️ Attempt 1 failed (Exit Code: $EXIT_CODE)"
-          echo "📄 Checking error logs..."
+          echo "📄 Error analysis:"
+          echo "---"
+          tail -30 /tmp/sync_attempt1.log
+          echo "---"
           
-          # Check for common errors
-          if grep -qi "Sign in to confirm" /tmp/sync.log 2>/dev/null || grep -qi "Sign in to confirm" /tmp/ytdlp.log 2>/dev/null; then
-            echo "❌ Issue: YouTube authentication required"
-            echo "📄 Action: Update YOUTUBE_COOKIES_TXT secret in GitHub"
-          elif grep -qi "HTTP Error 403" /tmp/sync.log 2>/dev/null || grep -qi "403" /tmp/ytdlp.log 2>/dev/null; then
-            echo "❌ Issue: IP blocked by YouTube"
-            echo "📄 Action: Use VPN/Proxy (see workflow comments)"
-          elif grep -qi "ModuleNotFoundError\|ImportError" /tmp/sync.log 2>/dev/null; then
-            echo "❌ Issue: Missing Python module"
-            echo "📄 Action: Check requirements.txt"
+          # Diagnose the issue
+          if grep -qi "Sign in to confirm\|Sign in to YouTube" /tmp/sync_attempt1.log; then
+            echo "❌ DIAGNOSIS: YouTube authentication expired"
+            echo "📝 ACTION REQUIRED: Update YOUTUBE_COOKIES_TXT secret"
+          elif grep -qi "HTTP Error 403\|403 Forbidden" /tmp/sync_attempt1.log; then
+            echo "❌ DIAGNOSIS: IP blocked by YouTube"
+            echo "📝 ACTION REQUIRED: Wait or use proxy"
+          elif grep -qi "ModuleNotFoundError\|ImportError" /tmp/sync_attempt1.log; then
+            echo "❌ DIAGNOSIS: Missing Python dependency"
+            echo "📝 ACTION REQUIRED: Check requirements.txt"
+          elif grep -qi "playwright.*not found\|browser.*not found" /tmp/sync_attempt1.log; then
+            echo "❌ DIAGNOSIS: Playwright browser issue"
+            echo "📝 Attempting to reinstall Playwright..."
+            python -m playwright install --force chromium
           fi
           
           echo ""
-          echo "♻️ [Attempt 2/2] Retrying with aggressive cleanup..."
+          echo "♻️ [Attempt 2/2] Retrying..."
           
-          # Clean Python cache only (NOT system deps)
+          # Clean cache
           find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null
           find . -type f -name "*.pyc" -delete 2>/dev/null
           
-          # Reinstall Python deps (but use cache)
-          pip install --upgrade --force-reinstall --no-deps yt-dlp 2>&1 | grep -i error || echo "✅ yt-dlp reinstalled"
-          
-          echo "🚀 Running sync again..."
-          timeout 300 python3 sync_production.py 2>&1 | tee /tmp/sync_retry.log
+          python3 sync_production.py 2>&1 | tee /tmp/sync_attempt2.log
           EXIT_CODE=$?
         fi
         
@@ -201,8 +191,10 @@ jobs:
         else
           echo ""
           echo "❌ Sync failed after 2 attempts (Exit Code: $EXIT_CODE)"
-          echo "📄 Last 50 lines of log:"
-          tail -50 /tmp/sync*.log 2>/dev/null || true
+          echo "📄 Final error log:"
+          echo "---"
+          tail -50 /tmp/sync_attempt*.log | tail -50
+          echo "---"
           exit $EXIT_CODE
         fi
 
@@ -215,7 +207,7 @@ jobs:
           video_metadata_cache.json
           sync_db.sqlite
         retention-days: 30
-        if-no-files-found: warn
+        if-no-files-found: ignore
 
     - name: Upload Debug Info (On Failure)
       if: failure()
@@ -223,12 +215,11 @@ jobs:
       with:
         name: debug-info-${{ github.run_id }}
         path: |
-          /tmp/*.log
+          /tmp/sync_*.log
           *.log
           *.png
-          *.json
         retention-days: 7
-        if-no-files-found: warn
+        if-no-files-found: ignore
 
     - name: Notify Telegram on Failure
       if: failure()
@@ -237,18 +228,23 @@ jobs:
         TELEGRAM_TO: ${{ secrets.TELEGRAM_TO }}
       run: |
         if [[ -z "$TELEGRAM_TOKEN" || -z "$TELEGRAM_TO" ]]; then
-          echo "⚠️ Telegram credentials not set, skipping notification"
           exit 0
         fi
         
         ERROR_TYPE="Unknown"
-        if grep -qi "Sign in to confirm" /tmp/sync*.log 2>/dev/null; then
-          ERROR_TYPE="YouTube Auth Failed - Update cookies"
-        elif grep -qi "403" /tmp/sync*.log 2>/dev/null; then
-          ERROR_TYPE="IP Blocked - Use proxy"
-        elif grep -qi "connection\|timeout" /tmp/sync*.log 2>/dev/null; then
-          ERROR_TYPE="Network Error"
-        elif grep -qi "ModuleNotFoundError\|ImportError" /tmp/sync*.log 2>/dev/null; then
+        ERROR_LOG=""
+        
+        if [ -f "/tmp/sync_attempt2.log" ]; then
+          ERROR_LOG=$(tail -20 /tmp/sync_attempt2.log)
+        elif [ -f "/tmp/sync_attempt1.log" ]; then
+          ERROR_LOG=$(tail -20 /tmp/sync_attempt1.log)
+        fi
+        
+        if echo "$ERROR_LOG" | grep -qi "Sign in to confirm"; then
+          ERROR_TYPE="YouTube Auth Failed"
+        elif echo "$ERROR_LOG" | grep -qi "403"; then
+          ERROR_TYPE="IP Blocked"
+        elif echo "$ERROR_LOG" | grep -qi "ModuleNotFoundError"; then
           ERROR_TYPE="Missing Python module"
         fi
         
@@ -256,7 +252,7 @@ jobs:
         curl -s -X POST https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage \
         -d chat_id=$TELEGRAM_TO \
         -d text="$MESSAGE" \
-        -d parse_mode="Markdown" || echo "⚠️ Failed to send Telegram notification"
+        -d parse_mode="Markdown"
 
     - name: Commit changes
       if: success()
@@ -264,15 +260,15 @@ jobs:
         git config --global user.name "Rutube Bot"
         git config --global user.email "bot@github.com"
         
-        # Check if files exist and have changes
-        CHANGED=false
-        [ -f sync_db.sqlite ] && git add sync_db.sqlite 2>/dev/null && CHANGED=true
-        [ -f video_metadata_cache.json ] && git add video_metadata_cache.json 2>/dev/null && CHANGED=true
+        # Add files if they exist
+        git add sync_db.sqlite 2>/dev/null || true
+        git add video_metadata_cache.json 2>/dev/null || true
         
-        if [ "$CHANGED" = true ] && [ -n "$(git diff --cached)" ]; then
-          git commit -m "🤖 Sync update [skip ci]" || echo "⚠️ Nothing to commit"
-          git pull --rebase origin main || echo "⚠️ Pull failed"
-          git push origin main || echo "⚠️ Push failed"
-        else
+        # Only commit if there are changes
+        if git diff --cached --quiet; then
           echo "✅ No changes to commit"
+        else
+          git commit -m "🤖 Sync update [skip ci]"
+          git pull --rebase origin main
+          git push origin main
         fi
