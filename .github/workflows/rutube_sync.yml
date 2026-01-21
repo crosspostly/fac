@@ -188,20 +188,22 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: cache-metadata
+        name: cache-metadata-${{ github.run_id }}
         path: video_metadata_cache.json
         retention-days: 30
+        if-no-files-found: warn
 
     - name: Upload Debug Info (On Failure)
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: debug-info
+        name: debug-info-${{ github.run_id }}
         path: |
           *.log
           *.png
           sync_db.sqlite
         retention-days: 7
+        if-no-files-found: warn
 
     - name: Notify Telegram on Failure
       if: failure()
