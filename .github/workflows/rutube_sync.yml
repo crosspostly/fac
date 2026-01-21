@@ -69,6 +69,7 @@ jobs:
     - name: Cache pip packages (AGGRESSIVE)
       run: |
         mkdir -p ~/.cache/pip-cache
+        mkdir -p ~/.config/pip
         echo "[global]" > ~/.config/pip/pip.conf
         echo "cache-dir = ~/.cache/pip-cache" >> ~/.config/pip/pip.conf
         echo "no-deps = false" >> ~/.config/pip/pip.conf
