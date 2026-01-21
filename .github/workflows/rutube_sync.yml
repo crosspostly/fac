@@ -8,16 +8,6 @@ on:
 permissions:
   contents: write          # Allow committing back to repo
 
-name: Rutube Sync Bot
-
-on:
-  schedule:
-    - cron: '0 */3 * * *'  # Run every 3 hours
-  workflow_dispatch:       # Allow manual run button
-
-permissions:
-  contents: write          # Allow committing back to repo
-
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -132,19 +122,6 @@ jobs:
           git add sync_db.sqlite
           git commit -m "🤖 Sync: Update database [skip ci]"
           git push origin main
-        else
-          echo "No changes in DB."
-        fi
-      run: |
-        git config --global user.name "Rutube Bot Action"
-        git config --global user.email "bot@github.com"
-        
-        # Check if DB changed
-        if [[ -n $(git status -s sync_db.sqlite) ]]; then
-          echo "Changes detected in DB. Committing..."
-          git add sync_db.sqlite
-          git commit -m "🤖 Sync: Update database [skip ci]"
-          git push
         else
           echo "No changes in DB."
         fi
