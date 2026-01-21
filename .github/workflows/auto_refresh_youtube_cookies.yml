@@ -5,6 +5,10 @@ on:
     - cron: '0 0 * * 0'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
@@ -22,7 +26,7 @@ jobs:
       id: cache-key
       run: echo "key=playwright-${{ runner.os }}-$(date +%Y%m%d)" >> $GITHUB_OUTPUT
     
-    - name: Cache playwright browsers (with fast hit)
+    - name: Cache playwright browsers (smart cache with fallback)
       id: cache-browsers
       uses: actions/cache@v4
       with:
@@ -52,7 +56,7 @@ jobs:
     - name: Retry install and refresh (after cache clear)
       if: steps.refresh.outcome == 'failure' && steps.cache-browsers.outputs.cache-hit == 'true'
       run: |
-        echo "Reinstalling Playwright..."
+        echo "Reinstalling Playwright after cache clear..."
         playwright install chromium
         playwright install-deps
         python refresh_youtube_cookies.py
@@ -68,26 +72,27 @@ jobs:
           exit 1
         fi
     
-    - name: Update GitHub Secret
+    - name: Update GitHub Secret (if PAT_TOKEN available)
       if: success()
       env:
         GH_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
         if [ -z "$GH_TOKEN" ]; then
           echo "⚠️  PAT_TOKEN not set, skipping secret update"
-          echo "📦 Cookies are available in artifacts for manual update"
+          echo "📦 Cookies available in artifacts for manual update"
           exit 0
         fi
         gh secret set YOUTUBE_COOKIES_TXT < youtube_cookies_new.txt
         echo "✅ GitHub Secret updated successfully"
     
-    - name: Upload cookies backup
+    - name: Upload cookies backup artifact
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: youtube-cookies-backup
         path: youtube_cookies_new.txt
         retention-days: 7
+        compression-level: 0
     
     - name: Notify Telegram Success
       if: success()
@@ -108,7 +113,7 @@ jobs:
         TELEGRAM_TO: ${{ secrets.TELEGRAM_TO }}
       run: |
         if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_TO" ]; then
-          curl -s -X POST https://api.github.com/repos/crosspostly/fac/git/commits \
+          curl -s -X POST https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage \
             -d chat_id=$TELEGRAM_TO \
-            -d text="❌ YouTube cookies refresh FAILED"
+            -d text="❌ YouTube cookies refresh FAILED - Check logs for details"
         fi
