@@ -1,9 +1,15 @@
-yt-dlp>=2023.01.01
-requests>=2.25.1
-playwright>=1.35.0
-python-dotenv>=1.0.0
+yt-dlp>=2025.01.01
+requests>=2.31.0
+playwright>=1.48.0
+python-dotenv>=1.0.1
 # TikTok dependencies
-tiktok-uploader>=1.0.0
-selenium>=4.0.0
+tiktok-uploader>=0.1.0
+selenium>=4.20.0
 # Instagrapi (optional, but good to have)
-instagrapi>=1.17.0
+instagrapi>=2.1.0
+# Core utils
+setuptools
+wheel
+brotli
+typing-extensions
+aiohttp
