@@ -27,7 +27,8 @@ def set_cover_frame(video_id, title_hint=""):
         page.set_default_timeout(90000)
         
         # 1. Navigate to List
-        list_url = "https://studio.rutube.ru/videos?show_moderation=1&ordering=calculated_date_asc&period=7_days&tab=main#video"
+        # Changed ordering to DESC to see newest videos first
+        list_url = "https://studio.rutube.ru/videos?show_moderation=1&ordering=calculated_date_desc&period=7_days&tab=main#video"
         print(f"🌍 Navigating to Studio List: {list_url}")
         
         try:
