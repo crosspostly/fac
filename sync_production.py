@@ -35,6 +35,9 @@ YOUTUBE_CHANNEL_URL = config.YOUTUBE_CHANNEL_URL
 UPLOADS_DIR = config.UPLOADS_DIR
 DB_FILE = config.DB_FILE
 
+# Metadata cache file for quick lookups
+METADATA_CACHE_FILE = "video_metadata_cache.json"
+
 # Resolve yt-dlp path
 YT_DLP_PATH = config.YT_DLP_PATH
 if not os.path.exists(YT_DLP_PATH) or not os.access(YT_DLP_PATH, os.X_OK):
@@ -68,6 +71,24 @@ def mark_video_synced(y_id, title):
     conn.commit()
     conn.close()
 
+def load_metadata_cache():
+    """Load cached video metadata to avoid repeated API calls"""
+    if os.path.exists(METADATA_CACHE_FILE):
+        try:
+            with open(METADATA_CACHE_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_metadata_cache(cache):
+    """Save video metadata cache"""
+    try:
+        with open(METADATA_CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log(f"⚠️ Ошибка сохранения кэша: {e}")
+
 def get_auth_token():
     r = requests.post("https://rutube.ru/api/accounts/token_auth/", data={'username': LOGIN, 'password': PASSWORD})
     return r.json().get('token') if r.status_code == 200 else None
@@ -99,23 +120,54 @@ def wait_for_processing(video_id, token, max_retries=120, delay=5):
     log("⏰ Превышено время ожидания обработки видео")
     return False
 
-def get_full_video_info(y_id):
-    """Fetches full video metadata including full description."""
-    try:
-        cmd = [YT_DLP_PATH, "--dump-json"]
-        # Use universal configuration to bypass YouTube restrictions
-        cmd.extend(["--extractor-args", "youtube:player_skip=js"])
-        if os.path.exists("youtube_cookies.txt"):
-             cmd.extend(["--cookies", "youtube_cookies.txt"])
-        cmd.append(f"https://youtube.com/watch?v={y_id}")
+def get_full_video_info(y_id, metadata_cache=None):
+    """Fetches full video metadata with caching and retry logic"""
+    
+    # Check cache first
+    if metadata_cache and y_id in metadata_cache:
+        log(f"📄 Метадата видео {y_id} найдена в кэше")
+        return metadata_cache[y_id]
+    
+    for attempt in range(3):
+        try:
+            cmd = [YT_DLP_PATH, "--dump-json"]
+            
+            # Critical: pass cookies for YouTube authentication
+            if os.path.exists("youtube_cookies.txt"):
+                cmd.extend(["--cookies", "youtube_cookies.txt"])
+                log(f"🍮 Using YouTube cookies for attempt {attempt + 1}...")
+            else:
+                log(f"⚠️ No YouTube cookies found! Attempt {attempt + 1} will likely fail.")
+            
+            cmd.append(f"https://youtube.com/watch?v={y_id}")
+            
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if res.returncode == 0:
+                data = json.loads(res.stdout)
+                # Cache successful result
+                if metadata_cache is not None:
+                    metadata_cache[y_id] = data
+                log(f"✅ Получена полная инфо для {y_id}")
+                return data
+            else:
+                if "Sign in to confirm" in res.stderr or "bot" in res.stderr.lower():
+                    log(f"❌ YouTube требует авторизацию! Cookies истекли или невалидны.")
+                    log(f"📄 Обнови YOUTUBE_COOKIES_TXT secret в GitHub!")
+                else:
+                    log(f"⚠️ Ошибка (attempt {attempt + 1}/3): {res.stderr[:200]}")
+                
+                if attempt < 2:
+                    wait_time = (2 ** attempt) * 5  # Exponential backoff: 5s, 10s, 20s
+                    log(f"⏳ Ожидаю {wait_time}s перед повторным попытом...")
+                    time.sleep(wait_time)
         
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        if res.returncode == 0:
-            return json.loads(res.stdout)
-        else:
-            log(f"⚠️ Ошибка получения полной инфо (get_full_video_info) для {y_id}: {res.stderr}")
-    except Exception as e:
-        log(f"⚠️ Ошибка получения полной информации о видео: {e}")
+        except subprocess.TimeoutExpired:
+            log(f"⚠️ Timeout при получении инфо (attempt {attempt + 1}/3)")
+        except Exception as e:
+            log(f"⚠️ Ошибка: {e} (attempt {attempt + 1}/3)")
+    
+    log(f"❌ Не удалось получить полную инфо для {y_id} после 3 попыток")
     return None
 
 def process_video(y_id, title, description, token):
@@ -126,18 +178,26 @@ def process_video(y_id, title, description, token):
     
     # Скачивание (только видео)
     if not os.path.exists(local_video_path):
-        # Add cookies if available
         yt_cmd = [YT_DLP_PATH, "-f", "best[ext=mp4]", "-o", f"{local_file_base}.%(ext)s"]
-        # Use universal configuration to bypass YouTube restrictions
-        yt_cmd.extend(["--extractor-args", "youtube:player_skip=js"])
+        
+        # CRITICAL: Use cookies for authentication
         if os.path.exists("youtube_cookies.txt"):
-             yt_cmd.extend(["--cookies", "youtube_cookies.txt"])
+            yt_cmd.extend(["--cookies", "youtube_cookies.txt"])
+            log(f"🍮 Скачивание с cookies...")
+        else:
+            log(f"⚠️ Нет cookies! Скачивание без авторизации (может не работать)...")
+        
+        yt_cmd.extend(["--retries", "5", "--fragment-retries", "5"])
         yt_cmd.append(f"https://youtube.com/watch?v={y_id}")
         
-        subprocess.run(yt_cmd)
+        log(f"😁 Начинаю скачивание...")
+        result = subprocess.run(yt_cmd)
 
     if not os.path.exists(local_video_path):
-        log(f"❌ Ошибка: Файл не скачался (YouTube block?). Пропускаем загрузку.")
+        log(f"❌ Ошибка: Файл не скачался! Проблемы:")
+        log(f"   • YouTube требует авторизацию (обновить cookies)")
+        log(f"   • GitHub Actions IP заблокирован YouTube")
+        log(f"   • Видео недоступно в вашем регионе")
         return False
 
     # --- EXTERNAL UPLOAD (Catbox) ---
@@ -145,7 +205,7 @@ def process_video(y_id, title, description, token):
         log(f"📦 Uploading to Catbox (External Host)...")
         try:
             files = {'reqtype': (None, 'fileupload'), 'fileToUpload': open(path, 'rb')}
-            resp = requests.post("https://catbox.moe/user/api.php", files=files)
+            resp = requests.post("https://catbox.moe/user/api.php", files=files, timeout=300)
             if resp.status_code == 200:
                 return resp.text.strip()
             log(f"❌ Catbox Error: {resp.text}")
@@ -156,7 +216,7 @@ def process_video(y_id, title, description, token):
     # Try external upload first
     video_url = upload_to_catbox(local_video_path)
     
-    # Fallback to local server if external fails (or if file too big)
+    # Fallback to local server if external fails
     if not video_url:
         log("⚠️ External upload failed. Falling back to Local Server URL.")
         video_url = f"https://{PUBLIC_DOMAIN}/rutube-webhook/static/{y_id}.mp4"
@@ -183,11 +243,11 @@ def process_video(y_id, title, description, token):
             log(f"📄 Полный ответ API: {r.text}")
             return False
             
-        log(f"✅ Успешно отправлено! ID: {rutube_video_id}")
+        log(f"✅ Успешно отправлено на Rutube! ID: {rutube_video_id}")
         
         # Ждем обработки
         if wait_for_processing(rutube_video_id, token):
-            log("✅ Видео обработано.")
+            log("✅ Rutube: Видео обработано.")
             
             # Устанавливаем кадр обложки (SAFE MODE)
             if set_cover_frame:
@@ -202,12 +262,14 @@ def process_video(y_id, title, description, token):
             log("⚠️ Ошибка обработки видео")
 
         # --- SOCIAL MEDIA UPLOAD ---
-        # Вызываем загрузчик для соцсетей (TikTok/Insta)
-        # Внутри process_social_uploads будет проверка ориентации!
         if process_social_uploads:
             try:
-                # Use the path we just downloaded
-                process_social_uploads(local_video_path, title, description)
+                log("📱 Начинаю загрузку в соцсети (TikTok/Instagram)...")
+                success = process_social_uploads(local_video_path, title, description)
+                if success:
+                    log("✅ Соцсети: Успешно!")
+                else:
+                    log("⚠️ Соцсети: Ошибка не наша, но загрузка могла быть провалена")
             except Exception as e:
                 log(f"⚠️ Ошибка загрузки в соцсети: {e}")
         # ---------------------------
@@ -222,11 +284,16 @@ def process_video(y_id, title, description, token):
 
         mark_video_synced(y_id, title)
         return True
-    log(f"❌ Ошибка API: {r.text}")
+    log(f"❌ Rutube API ошибка: {r.text}")
     return False
 
 def sync():
     init_db()
+    
+    # Load metadata cache at start
+    metadata_cache = load_metadata_cache()
+    log(f"📄 Загружен кэш с {len(metadata_cache)} видео")
+    
     token = get_auth_token()
     if not token: 
         log("❌ Не удалось получить токен API")
@@ -234,8 +301,6 @@ def sync():
 
     # Простая проверка последних видео
     cmd = [YT_DLP_PATH, "--dump-json", "--flat-playlist", "--playlist-end", "5"]
-    # Use universal configuration to bypass YouTube restrictions
-    cmd.extend(["--extractor-args", "youtube:player_skip=js"])
     if os.path.exists("youtube_cookies.txt"):
          cmd.extend(["--cookies", "youtube_cookies.txt"])
     cmd.append(YOUTUBE_CHANNEL_URL)
@@ -244,38 +309,37 @@ def sync():
 
     if res.returncode != 0:
         log(f"❌ Ошибка исполнения YT-DLP (Exit Code: {res.returncode})")
-        log(f"📝 Stderr: {res.stderr}")
+        log(f"📝 Stderr: {res.stderr[:300]}")
     
     videos = []
     try:
         for line in res.stdout.strip().split("\n"):
             if line: videos.append(json.loads(line))
     except json.JSONDecodeError as e:
-        log(f"❌ Ошибка парсинга JSON от yt-dlp: {e}")
-        log(f"📄 Полученный stdout: {res.stdout}")
+        log(f"❌ Ошибка парсинга JSON: {e}")
     
     # 1. Проверяем top-5
     for vid in videos:
         y_id = vid.get('id')
         if not is_video_synced(y_id):
-            # Fetch full details to get complete description
-            full_info = get_full_video_info(y_id)
+            # Fetch full details with caching
+            full_info = get_full_video_info(y_id, metadata_cache)
             if full_info:
                 title = full_info.get('title', vid.get('title'))
                 description = full_info.get('description', vid.get('description', ''))
-                process_video(y_id, title, description, token)
             else:
-                log(f"⚠️ Не удалось получить полную информацию для {y_id}, используем частичную.")
-                process_video(y_id, vid.get('title'), vid.get('description', ''), token)
+                title = vid.get('title')
+                description = vid.get('description', '')
+                log(f"⚠️ Using fallback metadata for {y_id}")
+            
+            process_video(y_id, title, description, token)
+            # Save cache after processing
+            save_metadata_cache(metadata_cache)
             return
 
     # Если мы здесь, значит все top-5 уже синхронизированы.
     if not videos:
         log("⚠️ Не найдено видео на канале (список пуст).")
-        if res.returncode != 0:
-             log("ℹ️ Возможная причина: ошибка yt-dlp (см. логи выше).")
-        elif not res.stdout.strip():
-             log("ℹ️ yt-dlp вернул пустой результат. Возможно, канал пуст или заблокирован для этого IP.")
         return
 
     # 2. Проверяем дату самого свежего видео
@@ -295,14 +359,13 @@ def sync():
         days_diff = (datetime.datetime.now() - most_recent_date).days
         if days_diff > 7:
             should_expand = True
-            log(f"🕵️ Последнее видео было {days_diff} дн. назад. Расширяем поиск до 50...")
+            log(f"🕵️ Последнее видео было {days_diff} дн. назад. Расширяем поиск...")
     else:
         should_expand = True
     
     if should_expand:
         # 3. Расширенный поиск (50 видео)
         cmd_expanded = [YT_DLP_PATH, "--dump-json", "--flat-playlist", "--playlist-end", "50"]
-        cmd_expanded.extend(["--extractor-args", "youtube:player_skip=js"])
         if os.path.exists("youtube_cookies.txt"):
             cmd_expanded.extend(["--cookies", "youtube_cookies.txt"])
         cmd_expanded.append(YOUTUBE_CHANNEL_URL)
@@ -318,19 +381,24 @@ def sync():
             if not is_video_synced(y_id):
                 log(f"🕰️ Найдено старое несинхронизированное видео: {vid.get('title')}")
                 
-                # Fetch full details
-                full_info = get_full_video_info(y_id)
+                full_info = get_full_video_info(y_id, metadata_cache)
                 if full_info:
                     title = full_info.get('title', vid.get('title'))
                     description = full_info.get('description', vid.get('description', ''))
-                    process_video(y_id, title, description, token)
                 else:
-                    process_video(y_id, vid.get('title'), vid.get('description', ''), token)
+                    title = vid.get('title')
+                    description = vid.get('description', '')
+                
+                process_video(y_id, title, description, token)
+                save_metadata_cache(metadata_cache)
                 return
         
-        log("✅ Все видео (из последних 50) уже синхронизированы.")
+        log("✅ Все видео из последних 50 уже синхронизированы.")
     else:
-        log("✅ Все последние видео (5) синхронизированы и канал активен.")
+        log("✅ Все последние видео синхронизированы.")
+    
+    # Save cache before exit
+    save_metadata_cache(metadata_cache)
 
 if __name__ == "__main__":
     sync()
