@@ -103,8 +103,8 @@ def get_full_video_info(y_id):
     """Fetches full video metadata including full description."""
     try:
         cmd = [YT_DLP_PATH, "--dump-json"]
-        # Use Android client to avoid 403 errors
-        cmd.extend(["--extractor-args", "youtube:player_client=android"])
+        # Use universal configuration to bypass YouTube restrictions
+        cmd.extend(["--extractor-args", "youtube:player_skip=js"])
         if os.path.exists("youtube_cookies.txt"):
              cmd.extend(["--cookies", "youtube_cookies.txt"])
         cmd.append(f"https://youtube.com/watch?v={y_id}")
@@ -128,8 +128,8 @@ def process_video(y_id, title, description, token):
     if not os.path.exists(local_video_path):
         # Add cookies if available
         yt_cmd = [YT_DLP_PATH, "-f", "best[ext=mp4]", "-o", f"{local_file_base}.%(ext)s"]
-        # Use Android client to avoid 403 errors
-        yt_cmd.extend(["--extractor-args", "youtube:player_client=android"])
+        # Use universal configuration to bypass YouTube restrictions
+        yt_cmd.extend(["--extractor-args", "youtube:player_skip=js"])
         if os.path.exists("youtube_cookies.txt"):
              yt_cmd.extend(["--cookies", "youtube_cookies.txt"])
         yt_cmd.append(f"https://youtube.com/watch?v={y_id}")
@@ -234,8 +234,8 @@ def sync():
 
     # Простая проверка последних видео
     cmd = [YT_DLP_PATH, "--dump-json", "--flat-playlist", "--playlist-end", "5"]
-    # Use Android client to avoid 403 errors
-    cmd.extend(["--extractor-args", "youtube:player_client=android"])
+    # Use universal configuration to bypass YouTube restrictions
+    cmd.extend(["--extractor-args", "youtube:player_skip=js"])
     if os.path.exists("youtube_cookies.txt"):
          cmd.extend(["--cookies", "youtube_cookies.txt"])
     cmd.append(YOUTUBE_CHANNEL_URL)
@@ -302,7 +302,7 @@ def sync():
     if should_expand:
         # 3. Расширенный поиск (50 видео)
         cmd_expanded = [YT_DLP_PATH, "--dump-json", "--flat-playlist", "--playlist-end", "50"]
-        cmd_expanded.extend(["--extractor-args", "youtube:player_client=android"])
+        cmd_expanded.extend(["--extractor-args", "youtube:player_skip=js"])
         if os.path.exists("youtube_cookies.txt"):
             cmd_expanded.extend(["--cookies", "youtube_cookies.txt"])
         cmd_expanded.append(YOUTUBE_CHANNEL_URL)
