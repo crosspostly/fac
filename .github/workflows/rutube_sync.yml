@@ -67,7 +67,8 @@ jobs:
 
     - name: Install Playwright system dependencies
       run: |
-        sudo python -m playwright install-deps chromium
+        # Fix: Use the specific python executable that has playwright installed
+        sudo $(which python) -m playwright install-deps chromium
 
     - name: Verify Playwright
       run: |
