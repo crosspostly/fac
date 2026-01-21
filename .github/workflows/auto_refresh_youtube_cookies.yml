@@ -38,23 +38,25 @@ jobs:
         YOUTUBE_EMAIL: ${{ secrets.YOUTUBE_EMAIL }}
         YOUTUBE_PASSWORD: ${{ secrets.YOUTUBE_PASSWORD }}
       run: |
-        cat > refresh_cookies.py << 'EOF'
+        cat > refresh_cookies.py << 'ENDOFPYTHON'
 import asyncio
 import os
 import sys
 from playwright.async_api import async_playwright
 
 async def refresh_youtube_cookies():
-    """Automatically refresh YouTube cookies"""
     email = os.getenv('YOUTUBE_EMAIL')
     password = os.getenv('YOUTUBE_PASSWORD')
     
     if not email or not password:
-        print("❌ YOUTUBE_EMAIL or YOUTUBE_PASSWORD not set")
+        print("YOUTUBE_EMAIL or YOUTUBE_PASSWORD not set")
         return None
     
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=['--disable-blink-features=AutomationControlled'])
+        browser = await p.chromium.launch(
+            headless=True,
+            args=['--disable-blink-features=AutomationControlled']
+        )
         context = await browser.new_context(
             viewport={'width': 1280, 'height': 720},
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -62,80 +64,66 @@ async def refresh_youtube_cookies():
         page = await context.new_page()
         
         try:
-            # Navigate to YouTube
-            print("🌐 Opening YouTube...")
+            print("Opening YouTube...")
             await page.goto('https://www.youtube.com', wait_until='networkidle')
             
-            # Check if already logged in
             try:
                 await page.wait_for_selector('a[aria-label="Create"]', timeout=5000)
-                print("✅ Already logged in!")
+                print("Already logged in")
             except:
-                print("🔐 Not logged in, signing in...")
+                print("Not logged in, signing in...")
                 
-                # Click sign in button
                 try:
                     sign_in_button = page.locator('a:has-text("Sign in")')
                     await sign_in_button.click()
                 except:
-                    # Try alternative selector
                     await page.click('a[href*="accounts.google.com"]')
                 
                 await page.wait_for_load_state('networkidle')
                 
-                # Enter email
-                print(f"📧 Entering email...")
+                print("Entering email...")
                 try:
                     email_input = page.locator('input[type="email"]')
                     await email_input.fill(email)
                     await page.press('input[type="email"]', 'Enter')
                 except Exception as e:
-                    print(f"⚠️ Email input error: {e}")
+                    print(f"Email input error: {e}")
                 
                 await page.wait_for_timeout(2000)
                 
-                # Enter password
-                print("🔑 Entering password...")
+                print("Entering password...")
                 try:
                     password_input = page.locator('input[type="password"]')
                     await password_input.fill(password)
                     await page.press('input[type="password"]', 'Enter')
                 except Exception as e:
-                    print(f"⚠️ Password input error: {e}")
+                    print(f"Password input error: {e}")
                 
-                # Wait for redirect
-                print("⏳ Waiting for authentication...")
+                print("Waiting for authentication...")
                 try:
                     await page.wait_for_url('**/youtube.com/**', timeout=15000)
                     await page.wait_for_load_state('networkidle')
                 except:
-                    print("⚠️ May need 2FA - waiting longer...")
+                    print("May need 2FA - waiting longer...")
                     await page.wait_for_timeout(5000)
             
-            # Get cookies
-            print("🍪 Extracting cookies...")
+            print("Extracting cookies...")
             cookies = await context.cookies()
             
             if not cookies:
-                print("❌ No cookies found!")
+                print("No cookies found")
                 return None
             
-            # Convert to Netscape format
             netscape_cookies = convert_to_netscape_format(cookies)
             
-            # Save to file
             with open('youtube_cookies_new.txt', 'w') as f:
                 f.write(netscape_cookies)
             
-            # Output for GitHub Actions
-            print(f"✅ Success! Extracted {len(cookies)} cookies")
-            with open('/tmp/cookies_output.txt', 'w') as f:
-                f.write(netscape_cookies)
-            
+            print(f"Success! Extracted {len(cookies)} cookies")
             return True
         
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"Error: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -143,20 +131,16 @@ async def refresh_youtube_cookies():
             await browser.close()
 
 def convert_to_netscape_format(cookies):
-    """Convert Playwright cookies to Netscape format"""
     lines = [
         '# Netscape HTTP Cookie File',
-        '# This file was generated by auto_refresh_cookies workflow',
-        '# Do not edit directly!',
+        '# Generated by auto_refresh_cookies workflow',
         ''
     ]
     
     for cookie in cookies:
-        # Skip session cookies without expiry
         if not cookie.get('expires'):
             continue
         
-        # Netscape format: domain flag path secure expiry name value
         line = '\t'.join([
             cookie.get('domain', ''),
             'TRUE' if cookie.get('domain', '').startswith('.') else 'FALSE',
@@ -173,17 +157,17 @@ def convert_to_netscape_format(cookies):
 if __name__ == '__main__':
     result = asyncio.run(refresh_youtube_cookies())
     sys.exit(0 if result else 1)
-EOF
+ENDOFPYTHON
         python refresh_cookies.py
     
     - name: Check cookies extracted
       run: |
         if [ -f youtube_cookies_new.txt ]; then
           LINES=$(wc -l < youtube_cookies_new.txt)
-          echo "✅ Cookies file created with $LINES lines"
+          echo "Cookies file created with $LINES lines"
           head -20 youtube_cookies_new.txt
         else
-          echo "❌ Cookies file not found!"
+          echo "Cookies file not found"
           exit 1
         fi
     
@@ -192,14 +176,9 @@ EOF
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Read the cookies file
         COOKIES=$(cat youtube_cookies_new.txt)
-        
-        # Use GitHub CLI to update secret
         echo "$COOKIES" | gh secret set YOUTUBE_COOKIES_TXT --body -
-        
-        echo "✅ GitHub Secret updated successfully!"
-        echo "Lines in secret: $(echo "$COOKIES" | wc -l)"
+        echo "GitHub Secret updated successfully"
     
     - name: Upload cookies as artifact
       if: always()
@@ -216,15 +195,14 @@ EOF
         TELEGRAM_TO: ${{ secrets.TELEGRAM_TO }}
       run: |
         if [[ -z "$TELEGRAM_TOKEN" || -z "$TELEGRAM_TO" ]]; then
-          echo "⚠️  Telegram secrets not set, skipping notification"
+          echo "Telegram secrets not set, skipping notification"
           exit 0
         fi
         
-        MESSAGE="✅ YouTube cookies successfully refreshed!%0A%0AWorkflow: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        MESSAGE="YouTube cookies successfully refreshed"
         curl -s -X POST https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage \
           -d chat_id=$TELEGRAM_TO \
-          -d text="$MESSAGE" \
-          -d parse_mode="HTML" || echo "⚠️  Telegram notification failed"
+          -d text="$MESSAGE" || echo "Telegram notification failed"
     
     - name: Notify Telegram on Failure
       if: failure()
@@ -236,8 +214,7 @@ EOF
           exit 0
         fi
         
-        MESSAGE="❌ YouTube cookies refresh FAILED!%0A%0ACheck: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        MESSAGE="YouTube cookies refresh FAILED"
         curl -s -X POST https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage \
           -d chat_id=$TELEGRAM_TO \
-          -d text="$MESSAGE" \
-          -d parse_mode="HTML" || true
+          -d text="$MESSAGE" || true
