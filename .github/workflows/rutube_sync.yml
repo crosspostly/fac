@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
   schedule:
-    - cron: '0 */3 * * *'  # Run every 3 hours
+    - cron: '0 */8 * * *'  # Run every 8 hours (3 times a day)
   workflow_dispatch:       # Allow manual run button
 
 permissions:
@@ -115,7 +115,7 @@ jobs:
         set +e
         
         echo "🚀 [Attempt 1/2] Running sync_production.py..."
-        python3 sync_production.py 2>&1 | tee /tmp/sync_attempt1.log
+        xvfb-run python3 sync_production.py 2>&1 | tee /tmp/sync_attempt1.log
         EXIT_CODE=$?
         
         if [ $EXIT_CODE -ne 0 ]; then
@@ -223,7 +223,7 @@ jobs:
         -d parse_mode="Markdown"
 
     - name: Commit changes
-      if: success()
+      if: always()
       run: |
         git config --global user.name "Rutube Bot"
         git config --global user.email "bot@github.com"
@@ -231,6 +231,7 @@ jobs:
         # Add files if they exist
         git add sync_db.sqlite 2>/dev/null || true
         git add video_metadata_cache.json 2>/dev/null || true
+        git add insta_tok/tiktok_posted.json 2>/dev/null || true
         
         # Only commit if there are changes
         if git diff --cached --quiet; then
