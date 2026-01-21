@@ -37,13 +37,22 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install --upgrade pip
-        pip install playwright
-        playwright install chromium
-        playwright install-deps
-    
+        python -m pip install --upgrade pip
+        python -m pip install playwright
+        python -m playwright install chromium
+        python -m playwright install-deps
+
+    - name: Restore current cookies (Seed)
+      env:
+        EXISTING_COOKIES: ${{ secrets.YOUTUBE_COOKIES_TXT }}
+      run: |
+        echo "$EXISTING_COOKIES" > youtube_cookies.txt
+
     - name: Refresh YouTube cookies
       id: refresh
+      env:
+        YOUTUBE_EMAIL: ${{ secrets.YOUTUBE_EMAIL }}
+        YOUTUBE_PASSWORD: ${{ secrets.YOUTUBE_PASSWORD }}
       run: python refresh_youtube_cookies.py
       continue-on-error: true
     
