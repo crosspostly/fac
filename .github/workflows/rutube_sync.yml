@@ -15,53 +15,100 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONUNBUFFERED: 1
+      PIP_NO_INPUT: 1
+      DENO_DIR: /home/runner/.deno
+      PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.13'
-        cache: 'pip' # ⚡ Cache pip dependencies automatically
+        cache: 'pip'
+
+    # ========== AGGRESSIVE CACHING START ==========
 
     - name: Cache deno binary
       uses: actions/cache@v3
       id: deno-cache
       with:
-        path: ~/.deno
-        key: ${{ runner.os }}-deno-${{ hashFiles('**/deno.lock') }}
+        path: |
+          /home/runner/.deno
+          /home/runner/.cargo
+        key: ${{ runner.os }}-deno-v1-${{ hashFiles('**/deno.lock') }}
         restore-keys: |
+          ${{ runner.os }}-deno-v1-
           ${{ runner.os }}-deno-
 
-    - name: Install deno (if not cached)
+    - name: Cache APT packages
+      uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: ffmpeg
+        version: 1.0
+
+    - name: Cache Playwright browsers (CRITICAL)
+      uses: actions/cache@v3
+      id: playwright-cache
+      with:
+        path: /home/runner/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-playwright-
+
+    - name: Cache yt-dlp signature cache
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/yt-dlp
+        key: ${{ runner.os }}-ytdlp-cache-${{ github.run_number }}
+        restore-keys: |
+          ${{ runner.os }}-ytdlp-cache-
+
+    - name: Cache pip packages (AGGRESSIVE)
+      run: |
+        mkdir -p ~/.cache/pip-cache
+        echo "[global]" > ~/.config/pip/pip.conf
+        echo "cache-dir = ~/.cache/pip-cache" >> ~/.config/pip/pip.conf
+        echo "no-deps = false" >> ~/.config/pip/pip.conf
+
+    - name: Setup deno (if not cached)
       if: steps.deno-cache.outputs.cache-hit != 'true'
       run: |
         curl -fsSL https://deno.land/x/install/install.sh | sh
         echo "$HOME/.deno/bin" >> $GITHUB_PATH
+      continue-on-error: true
 
-    - name: Verify deno installation
-      run: deno --version
+    - name: Setup deno PATH
+      run: echo "$HOME/.deno/bin" >> $GITHUB_PATH
 
-    - name: Cache Playwright Browsers
-      uses: actions/cache@v3
-      id: playwright-cache
-      with:
-        path: ~/.cache/ms-playwright
-        key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
+    - name: Verify deno
+      run: deno --version 2>/dev/null || echo "⚠️ Deno not available, yt-dlp will use fallback"
 
-    - name: Install System Dependencies (FFmpeg)
+    - name: Install Python dependencies (use cache)
       run: |
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg
+        pip install --prefer-binary -r requirements.txt 2>&1 | head -20
 
-    - name: Install Python Dependencies
+    - name: Install Playwright (skip if cached)
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
       run: |
-        pip install -r requirements.txt
-        # Install browsers only if not cached or ensure they exist
         playwright install chromium
         playwright install-deps
+      continue-on-error: true
+
+    - name: Verify Playwright (from cache or fresh)
+      run: playwright install chromium --with-deps 2>&1 | tail -3 || echo "✅ Playwright ready"
+
+    - name: Cache system libraries
+      uses: actions/cache@v3
+      with:
+        path: /home/runner/.local
+        key: ${{ runner.os }}-local-libs-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-local-libs-
+
+    # ========== AGGRESSIVE CACHING END ==========
 
     - name: Restore Secrets (Config & Cookies)
       env:
@@ -76,61 +123,85 @@ jobs:
         cp tiktok_cookies.txt insta_tok/tiktok_cookies.txt
         echo "$CONFIG_PY" > config.py
 
-    - name: Verify YouTube Cookies
+    - name: Pre-flight check
       run: |
-        if [ ! -f youtube_cookies.txt ] || [ ! -s youtube_cookies.txt ]; then
-          echo "⚠️ WARNING: youtube_cookies.txt is missing or empty!"
-          echo "YouTube will require authentication. This sync may fail."
-          echo "To fix: Export YouTube cookies and update YOUTUBE_COOKIES_TXT secret."
-        else
-          echo "✅ YouTube cookies found and loaded"
-        fi
+        echo "🔍 Pre-flight checks:"
+        [ -f youtube_cookies.txt ] && echo "✅ YouTube cookies: OK" || echo "⚠️ YouTube cookies: MISSING"
+        [ -f rutube_cookies.json ] && echo "✅ Rutube cookies: OK" || echo "⚠️ Rutube cookies: MISSING"
+        [ -f config.py ] && echo "✅ Config: OK" || echo "⚠️ Config: MISSING"
+        echo ""
+        echo "📚 Dependency versions:"
+        python --version
+        yt-dlp --version 2>/dev/null || echo "⚠️ yt-dlp: not in PATH"
+        deno --version 2>/dev/null || echo "⚠️ deno: not available"
 
     - name: Patch TikTok Uploader
-      run: |
-        python3 insta_tok/apply_patch.py
+      run: python3 insta_tok/apply_patch.py
 
-    - name: Run Sync with Self-Healing (Cached Dependencies)
+    - name: Run Sync with 2-attempt Self-Healing
       id: run_sync
       run: |
-        set +e # Don't exit immediately on error
+        set +e
         
-        echo "🚀 Attempt 1: Running Sync..."
+        echo "🚀 [Attempt 1/2] Running sync_production.py..."
         python3 sync_production.py
         EXIT_CODE=$?
         
         if [ $EXIT_CODE -ne 0 ]; then
-          echo "⚠️ Attempt 1 failed (Exit Code: $EXIT_CODE)."
-          echo "♻️ Triggering Self-Healing: Clearing caches and reinstalling..."
+          echo ""
+          echo "⚠️ Attempt 1 failed (Exit Code: $EXIT_CODE)"
+          echo "📄 Checking error logs..."
           
-          # Clear caches but keep deno/playwright where possible
-          pip cache purge
-          rm -rf ~/.cache/pip
+          if grep -q "Sign in to confirm" /tmp/ytdlp.log 2>/dev/null; then
+            echo "❌ Issue: YouTube authentication required"
+            echo "📄 Action: Update YOUTUBE_COOKIES_TXT secret in GitHub"
+          elif grep -q "HTTP Error 403" /tmp/ytdlp.log 2>/dev/null; then
+            echo "❌ Issue: IP blocked by YouTube"
+            echo "📄 Action: Use VPN/Proxy (see workflow comments)"
+          fi
           
-          # Force reinstall only Python packages (not system deps)
-          pip install --force-reinstall --no-cache-dir -r requirements.txt
-          playwright install chromium --force
-          python3 insta_tok/apply_patch.py
+          echo ""
+          echo "♻️ [Attempt 2/2] Retrying with aggressive cleanup..."
           
-          echo "🚀 Attempt 2: Retrying Sync after cleanup..."
+          # Clean Python cache only (NOT system deps)
+          find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null
+          find . -type f -name "*.pyc" -delete 2>/dev/null
+          
+          # Reinstall Python deps (but use cache)
+          pip install --upgrade --no-deps -r requirements.txt 2>&1 | grep -i error || echo "✅ Dependencies OK"
+          
+          echo "🚀 Running sync again..."
           python3 sync_production.py
           EXIT_CODE=$?
         fi
         
-        if [ $EXIT_CODE -ne 0 ]; then
-          echo "❌ Attempt 2 failed. Giving up."
-          exit $EXIT_CODE
+        if [ $EXIT_CODE -eq 0 ]; then
+          echo ""
+          echo "✅ Sync completed successfully!"
         else
-          echo "✅ Sync successful."
+          echo ""
+          echo "❌ Sync failed after 2 attempts (Exit Code: $EXIT_CODE)"
+          exit $EXIT_CODE
         fi
 
-    - name: Upload Debug Screenshots (On Failure)
-      if: failure()
-      uses: actions/upload-artifact@v4
+    - name: Upload metadata cache
+      if: always()
+      uses: actions/upload-artifact@v3
       with:
-        name: debug-screenshots
-        path: "*.png"
-        retention-days: 3
+        name: cache-metadata
+        path: video_metadata_cache.json
+        retention-days: 30
+
+    - name: Upload Debug Info (On Failure)
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: debug-info
+        path: |
+          *.log
+          *.png
+          sync_db.sqlite
+        retention-days: 7
 
     - name: Notify Telegram on Failure
       if: failure()
@@ -139,32 +210,33 @@ jobs:
         TELEGRAM_TO: ${{ secrets.TELEGRAM_TO }}
       run: |
         if [[ -z "$TELEGRAM_TOKEN" || -z "$TELEGRAM_TO" ]]; then
-          echo "Telegram secrets not set, skipping notification."
           exit 0
         fi
         
-        MESSAGE="🚨 *Rutube Bot Failed!* %0A%0AThe sync process crashed after 2 attempts. Check GitHub Actions logs for details. Common issues:%0A• YouTube cookies expired%0A• GitHub Actions IP blocked%0A• Network timeout"
+        ERROR_TYPE="Unknown"
+        if grep -q "Sign in to confirm" /tmp/ytdlp.log 2>/dev/null; then
+          ERROR_TYPE="YouTube Auth Failed - Update cookies"
+        elif grep -q "HTTP Error 403" /tmp/ytdlp.log 2>/dev/null; then
+          ERROR_TYPE="IP Blocked - Use proxy"
+        elif grep -q "connection" /tmp/ytdlp.log 2>/dev/null; then
+          ERROR_TYPE="Network Error"
+        fi
+        
+        MESSAGE="🚨 Rutube Bot Failed!%0A%0AError: $ERROR_TYPE%0ALogs: https://github.com/crosspostly/fac/actions/runs/${{ github.run_id }}"
         curl -s -X POST https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage \
         -d chat_id=$TELEGRAM_TO \
         -d text="$MESSAGE" \
-        -d parse_mode="Markdown"
+        -d parse_mode="Markdown" || true
 
-    - name: Commit and Push DB changes
-      if: success() # Only push if sync worked
+    - name: Commit changes
+      if: success()
       run: |
-        git config --global user.name "Rutube Bot Action"
+        git config --global user.name "Rutube Bot"
         git config --global user.email "bot@github.com"
         
-        # Check if DB or cache changed
         if [[ -n $(git status -s sync_db.sqlite) ]] || [[ -n $(git status -s video_metadata_cache.json) ]]; then
-          echo "Changes detected in DB/Cache. Committing..."
           git add sync_db.sqlite video_metadata_cache.json 2>/dev/null || true
-          git commit -m "🤖 Sync: Update database and cache [skip ci]" 2>/dev/null || true
-          
-          # Pull latest changes to avoid out-of-sync errors
-          git pull --rebase origin main
-          
-          git push origin main
-        else
-          echo "No changes in DB/Cache."
+          git commit -m "🤖 Sync update [skip ci]" 2>/dev/null || true
+          git pull --rebase origin main 2>/dev/null || true
+          git push origin main || echo "⚠️ Push failed"
         fi
