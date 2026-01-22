@@ -145,9 +145,25 @@ async def refresh_youtube_cookies():
                     await page.screenshot(path='login_failed.png')
                     return False
 
-            # 4. Refresh/Activity
-            print("[4/5] 🔄 refreshing page to update tokens...")
-            await page.reload(wait_until='networkidle')
+            # 4. Refresh/Activity & More domains
+            print("[4/5] 🔄 visiting more domains to gather all cookies...")
+            
+            # Critical domains for a full session
+            extra_urls = [
+                'https://myaccount.google.com/',
+                'https://studio.youtube.com/',
+                'https://www.youtube.com/upload'
+            ]
+            
+            for url in extra_urls:
+                try:
+                    print(f"   🌍 Visiting {url}...")
+                    await page.goto(url, wait_until='networkidle', timeout=15000)
+                    await page.wait_for_timeout(2000)
+                except:
+                    print(f"   ⚠️ Timeout or error visiting {url}, continuing...")
+
+            await page.goto('https://www.youtube.com', wait_until='networkidle')
             await page.wait_for_timeout(3000)
             
             # 5. Export Cookies
@@ -158,6 +174,25 @@ async def refresh_youtube_cookies():
                 print("ERROR: No cookies found to export!")
                 return False
             
+            # Log summary of cookies by domain
+            domains = {}
+            for c in cookies:
+                d = c.get('domain', 'unknown')
+                domains[d] = domains.get(d, 0) + 1
+            
+            print("   📊 Cookie Stats:")
+            for d, count in domains.items():
+                print(f"      - {d}: {count} cookies")
+            
+            # Check for CRITICAL cookies needed by yt-dlp
+            critical_names = ['SID', 'HSID', 'SSID', 'SAPISID', 'APISID', 'LOGIN_INFO', '__Secure-3PSID', '__Secure-3PAPISID']
+            found_critical = [c['name'] for c in cookies if c['name'] in critical_names]
+            print(f"   🔑 Critical cookies found: {len(found_critical)}/{len(critical_names)}")
+            if len(found_critical) < 4:
+                print("   ⚠️ WARNING: Too few critical cookies found. Session might be incomplete!")
+            else:
+                print(f"   ✅ Found: {', '.join(found_critical)}")
+
             netscape_cookies = convert_to_netscape_format(cookies)
             
             with open(NEW_COOKIE_FILE_PATH, 'w') as f:

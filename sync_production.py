@@ -178,83 +178,83 @@ def wait_for_processing(video_id, token, max_retries=120, delay=5):
     return False
 
 def get_full_video_info(y_id, metadata_cache=None):
-    """Fetches full video metadata with caching and retry logic"""
+    """Fetches full video metadata with aggressive bypass methods"""
     
-    # Check cache first
     if metadata_cache and y_id in metadata_cache:
         log(f"📄 Метадата видео {y_id} найдена в кэше")
         return metadata_cache[y_id]
     
-    for attempt in range(3):
+    # Пытаемся разные комбинации клиентов для обхода блокировок
+    # ios и android клиенты сейчас самые стабильные
+    clients = [
+        "ios,android,web", # Сначала пробуем всё сразу
+        "android",         # Затем чистый андроид
+        "ios"              # Затем чистый iOS (часто пробивает 403)
+    ]
+
+    for attempt, client_list in enumerate(clients):
         try:
-            cmd = [YT_DLP_PATH, "--dump-json"]
+            cmd = [
+                YT_DLP_PATH, 
+                "--dump-json",
+                "--no-check-certificates",
+                "--extractor-args", f"youtube:player_client={client_list};player_skip=webpage,configs",
+                # Пытаемся использовать deno для JS если он доступен
+                "--js-runtimes", "deno"
+            ]
             
-            # Critical: pass cookies for YouTube authentication
             if COOKIE_FILE:
                 cmd.extend(["--cookies", COOKIE_FILE])
-                log(f"🍮 Using YouTube cookies for attempt {attempt + 1}...")
+                log(f"🍮 Attempt {attempt + 1}: Using cookies + clients ({client_list})")
             else:
-                log(f"⚠️ No YouTube cookies found! Attempt {attempt + 1} will likely fail.")
+                log(f"⚠️ Attempt {attempt + 1}: No cookies, trying clients ({client_list})")
             
             cmd.append(f"https://youtube.com/watch?v={y_id}")
             
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=40)
             
             if res.returncode == 0:
                 data = json.loads(res.stdout)
-                # Cache successful result
                 if metadata_cache is not None:
                     metadata_cache[y_id] = data
-                log(f"✅ Получена полная инфо для {y_id}")
+                log(f"✅ Success with client {client_list}")
                 return data
-            else:
-                if "Sign in to confirm" in res.stderr or "bot" in res.stderr.lower():
-                    log(f"❌ YouTube требует авторизацию! Cookies истекли или невалидны.")
-                    log(f"📄 Обнови YOUTUBE_COOKIES_TXT secret в GitHub!")
-                else:
-                    log(f"⚠️ Ошибка (attempt {attempt + 1}/3): {res.stderr[:200]}")
-                
-                if attempt < 2:
-                    wait_time = (2 ** attempt) * 5  # Exponential backoff: 5s, 10s, 20s
-                    log(f"⏳ Ожидаю {wait_time}s перед повторным попытом...")
-                    time.sleep(wait_time)
-        
-        except subprocess.TimeoutExpired:
-            log(f"⚠️ Timeout при получении инфо (attempt {attempt + 1}/3)")
+            
+            log(f"⚠️ Client {client_list} failed: {res.stderr[:100]}...")
+            
         except Exception as e:
-            log(f"⚠️ Ошибка: {e} (attempt {attempt + 1}/3)")
+            log(f"⚠️ Error during metadata fetch: {e}")
     
-    log(f"❌ Не удалось получить полную инфо для {y_id} после 3 попыток")
+    log(f"❌ All bypass methods failed for {y_id}")
     return None
 
 def process_video(y_id, title, description, token):
     log(f"🚀 Обработка: {title}")
     local_file_base = os.path.join(UPLOADS_DIR, y_id)
     local_video_path = f"{local_file_base}.mp4"
-    local_thumb_path = f"{local_file_base}.jpg"
     
-    # Скачивание (только видео)
     if not os.path.exists(local_video_path):
-        yt_cmd = [YT_DLP_PATH, "-f", "best[ext=mp4]", "-o", f"{local_file_base}.%(ext)s"]
+        # Используем iOS клиент для скачивания, он меньше всего требует логина
+        yt_cmd = [
+            YT_DLP_PATH, 
+            "-f", "best[ext=mp4]", 
+            "-o", f"{local_file_base}.%(ext)s",
+            "--no-check-certificates",
+            "--extractor-args", "youtube:player_client=ios,android;player_skip=webpage,configs",
+            "--js-runtimes", "deno",
+            "--retries", "3"
+        ]
         
-        # CRITICAL: Use cookies for authentication
         if COOKIE_FILE:
             yt_cmd.extend(["--cookies", COOKIE_FILE])
-            log(f"🍮 Скачивание с cookies...")
-        else:
-            log(f"⚠️ Нет cookies! Скачивание без авторизации (может не работать)...")
         
-        yt_cmd.extend(["--retries", "5", "--fragment-retries", "5"])
         yt_cmd.append(f"https://youtube.com/watch?v={y_id}")
         
-        log(f"😁 Начинаю скачивание...")
+        log(f"😁 Скачивание через мобильные API (ios,android)...")
         result = subprocess.run(yt_cmd)
 
-    if not os.path.exists(local_video_path):
-        log(f"❌ Ошибка: Файл не скачался! Проблемы:")
-        log(f"   • YouTube требует авторизацию (обновить cookies)")
-        log(f"   • GitHub Actions IP заблокирован YouTube")
-        log(f"   • Видео недоступно в вашем регионе")
+    if not os.path.exists(local_video_path) or os.path.getsize(local_video_path) == 0:
+        log(f"❌ Ошибка: Видео не скачалось даже через мобильные API.")
         return False
 
     # --- EXTERNAL UPLOAD (Catbox) ---
@@ -405,7 +405,10 @@ def sync():
             
             result = process_video(y_id, title, description, token)
             save_metadata_cache(metadata_cache)
-            return result  # 1 видео за 1 раз (каждые 8 часов)
+            if result is False:
+                log(f"❌ Failed to process video {y_id}")
+                return False
+            return True  # 1 видео за 1 раз (каждые 8 часов)
 
     # Если мы здесь, значит все top-5 уже синхронизированы.
     if not videos:
@@ -467,6 +470,9 @@ def sync():
                 save_metadata_cache(metadata_cache)
                 if result:
                     processed_count += 1
+                else:
+                    log(f"❌ Failed to process old video {y_id}")
+                    return False
         
         if processed_count > 0:
             return True
