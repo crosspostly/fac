@@ -157,13 +157,9 @@ def process_social_uploads(video_path, title, description):
         else:
             caption = title
         
-        upload_to_tiktok(video_path, caption)
+        return upload_to_tiktok(video_path, caption)
     else:
         log("📺 Horizontal video detected. Skipping TikTok (Shorts only).")
-
-    # Instagram DISABLED by user request
-    # upload_to_instagram(video_path, caption)
-    
-    return True
+        return True
 
     

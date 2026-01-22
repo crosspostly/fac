@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import sys
 import requests
 import subprocess
 import time
@@ -90,6 +91,7 @@ def log(msg):
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     conn.execute('CREATE TABLE IF NOT EXISTS synced (y_id TEXT PRIMARY KEY, title TEXT)')
+    conn.execute('CREATE TABLE IF NOT EXISTS publications (y_id TEXT PRIMARY KEY, title TEXT, description TEXT, rutube_status TEXT, tiktok_status TEXT, insta_status TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
     conn.commit()
     conn.close()
 
@@ -141,8 +143,12 @@ def save_metadata_cache(cache):
         log(f"⚠️ Ошибка сохранения кэша: {e}")
 
 def get_auth_token():
-    r = requests.post("https://rutube.ru/api/accounts/token_auth/", data={'username': LOGIN, 'password': PASSWORD})
-    return r.json().get('token') if r.status_code == 200 else None
+    try:
+        r = requests.post("https://rutube.ru/api/accounts/token_auth/", data={'username': LOGIN, 'password': PASSWORD}, timeout=20)
+        return r.json().get('token') if r.status_code == 200 else None
+    except Exception as e:
+        log(f"⚠️ Ошибка получения токена Rutube: {e}")
+        return None
 
 def wait_for_processing(video_id, token, max_retries=120, delay=5):
     headers = {"Authorization": f"Token {token}"}
@@ -286,26 +292,30 @@ def process_video(y_id, title, description, token):
             "description": description
         }
 
-        r = requests.post("https://rutube.ru/api/video/", json=payload, headers=headers)
-        if r.status_code in [200, 201]:
-            data = r.json()
-            rutube_video_id = data.get('id') or data.get('video_id')
-            
-            if not rutube_video_id:
-                log(f"❌ ID видео не найден в ответе! Статус: {r.status_code}")
-                return False
+        try:
+            r = requests.post("https://rutube.ru/api/video/", json=payload, headers=headers)
+            if r.status_code in [200, 201]:
+                data = r.json()
+                rutube_video_id = data.get('id') or data.get('video_id')
                 
-            log(f"✅ Успешно отправлено на Rutube! ID: {rutube_video_id}")
-            mark_video_synced(y_id, title, 'rutube', description)
-            
-            # Ждем обработки и ставим кадр
-            if wait_for_processing(rutube_video_id, token):
-                if set_cover_frame:
-                    try:
-                        set_cover_frame(rutube_video_id, title)
-                    except: pass
-        else:
-            log(f"❌ Rutube API ошибка: {r.text}")
+                if not rutube_video_id:
+                    log(f"❌ ID видео не найден в ответе! Статус: {r.status_code}")
+                    return False
+                    
+                log(f"✅ Успешно отправлено на Rutube! ID: {rutube_video_id}")
+                mark_video_synced(y_id, title, 'rutube', description)
+                
+                # Ждем обработки и ставим кадр
+                if wait_for_processing(rutube_video_id, token):
+                    if set_cover_frame:
+                        try:
+                            set_cover_frame(rutube_video_id, title)
+                        except: pass
+            else:
+                log(f"❌ Rutube API ошибка: {r.text}")
+                return False
+        except Exception as e:
+            log(f"❌ Rutube API исключение: {e}")
             return False
     else:
         log("ℹ️ Видео уже есть на Rutube, проверяем соцсети...")
@@ -334,10 +344,12 @@ def process_video(y_id, title, description, token):
                 log(f"⚠️ Ошибка удаления файла: {e}")
 
         return True
-    log(f"❌ Rutube API ошибка: {r.text}")
-    return False
+    
+    return True
 
 def sync():
+    processed_count = 0
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
     init_db()
     setup_cookies()
     
