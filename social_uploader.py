@@ -110,6 +110,13 @@ def upload_to_tiktok(video_path, caption):
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--start-maximized")
+        # Игнорируем уведомления, которые могут перекрывать поле ввода
+        options.add_experimental_option("prefs", {
+            "profile.default_content_setting_values.notifications": 2
+        })
         
         # Увеличиваем таймауты
         # (Они заданы в config.toml библиотеки, но мы их уже пропатчили)

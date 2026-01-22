@@ -14,11 +14,11 @@ else
 fi
 
 echo "🚀 Starting file server..."
-nohup python3 server_simple.py > server.log 2>&1 &
+nohup /home/daoq/rutube/venv/bin/python3 server_simple.py > server.log 2>&1 &
 echo "✅ Server started (PID $!)."
 
 echo "📅 Starting scheduler..."
-nohup python3 scheduler.py > scheduler.log 2>&1 &
+nohup /home/daoq/rutube/venv/bin/python3 scheduler.py > scheduler.log 2>&1 &
 echo "✅ Scheduler started (PID $!)."
 
 echo "🎉 System restarted successfully!"

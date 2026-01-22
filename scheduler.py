@@ -11,8 +11,6 @@ INTERVAL_SECONDS = INTERVAL_HOURS * 3600
 def log(msg):
     print(f"[{datetime.datetime.now()}] {msg}")
 
-import sys
-
 # ...
 
 def run_upload():

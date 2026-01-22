@@ -177,6 +177,13 @@ def wait_for_processing(video_id, token, max_retries=120, delay=5):
     log("⏰ Превышено время ожидания обработки видео")
     return False
 
+def get_python_executable():
+    """Returns path to the current or venv python executable"""
+    venv_python = os.path.join(os.path.dirname(__file__), "venv", "bin", "python3")
+    if os.path.exists(venv_python):
+        return venv_python
+    return sys.executable
+
 def get_full_video_info(y_id, metadata_cache=None):
     """Fetches full video metadata with aggressive bypass methods"""
     
@@ -198,7 +205,6 @@ def get_full_video_info(y_id, metadata_cache=None):
                 YT_DLP_PATH, 
                 "--dump-json",
                 "--no-check-certificates",
-                "--impersonate", "chrome",  # Имитация браузера Chrome
                 "--extractor-args", f"youtube:player_client={client_list};player_skip=webpage,configs",
                 "--js-runtimes", "deno",
                 "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
@@ -243,7 +249,6 @@ def process_video(y_id, title, description, token):
             "-f", "best[ext=mp4]/best", 
             "-o", f"{local_file_base}.%(ext)s",
             "--no-check-certificates",
-            "--impersonate", "chrome",
             "--extractor-args", "youtube:player_client=tv,ios,android;player_skip=webpage,configs",
             "--js-runtimes", "deno",
             "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -367,28 +372,33 @@ def sync():
         log("❌ Не удалось получить токен API")
         return False
 
-    # Простая проверка последних видео
-    cmd = [YT_DLP_PATH, "--dump-json", "--flat-playlist", "--playlist-end", "5"]
-    if COOKIE_FILE:
-         cmd.extend(["--cookies", COOKIE_FILE])
-    cmd.append(YOUTUBE_CHANNEL_URL)
-    
-    res = subprocess.run(cmd, capture_output=True, text=True)
-
-    if res.returncode != 0:
-        log(f"❌ Ошибка исполнения YT-DLP (Exit Code: {res.returncode})")
-        log(f"📝 Stderr: {res.stderr[:300]}")
-        return False
+    # Простая проверка последних видео (Видео + Shorts)
+    playlists = [
+        YOUTUBE_CHANNEL_URL,
+        YOUTUBE_CHANNEL_URL.rstrip('/') + '/shorts'
+    ]
     
     videos = []
-    try:
-        for line in res.stdout.strip().split("\n"):
-            if line: videos.append(json.loads(line))
-    except json.JSONDecodeError as e:
-        log(f"❌ Ошибка парсинга JSON: {e}")
+    for playlist_url in playlists:
+        log(f"🔎 Scanning playlist: {playlist_url}")
+        cmd = [YT_DLP_PATH, "--dump-json", "--flat-playlist", "--playlist-end", "5"]
+        if COOKIE_FILE:
+             cmd.extend(["--cookies", COOKIE_FILE])
+        cmd.append(playlist_url)
+        
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode == 0:
+            for line in res.stdout.strip().split("\n"):
+                if line: videos.append(json.loads(line))
+        else:
+            log(f"⚠️ Warning: Could not scan {playlist_url}")
+
+    if not videos:
+        log("❌ Не удалось получить список видео")
         return False
     
-    # 1. Проверяем top-5
+    # 1. Проверяем top-5 (теперь из обоих списков)
+    processed_this_run = 0
     for vid in videos:
         y_id = vid.get('id')
         
@@ -397,10 +407,20 @@ def sync():
         needs_tiktok = not is_video_synced(y_id, 'tiktok')
         
         if needs_rutube or needs_tiktok:
-            log(f"🔎 Видео {y_id} требует внимания: Rutube={needs_rutube}, TikTok={needs_tiktok}")
-            
             # Fetch full details with caching
             full_info = get_full_video_info(y_id, metadata_cache)
+            
+            # Если Рутуб уже готов, а ТикТок еще нет - проверяем ориентацию ДО того как считать это "работой"
+            if not needs_rutube and needs_tiktok:
+                width = full_info.get('width', 0)
+                height = full_info.get('height', 0)
+                if width > height and width > 0:
+                    # log(f"📺 Пропускаем горизонтальное {y_id} для TikTok (Rutube уже есть)")
+                    mark_video_synced(y_id, vid.get('title'), 'tiktok', vid.get('description'))
+                    continue
+
+            log(f"🔎 Видео {y_id} требует внимания: Rutube={needs_rutube}, TikTok={needs_tiktok}")
+            
             if full_info:
                 title = full_info.get('title', vid.get('title'))
                 description = full_info.get('description', vid.get('description', ''))
@@ -410,10 +430,19 @@ def sync():
             
             result = process_video(y_id, title, description, token)
             save_metadata_cache(metadata_cache)
+            
             if result is False:
                 log(f"❌ Failed to process video {y_id}")
                 return False
-            return True  # 1 видео за 1 раз (каждые 8 часов)
+            
+            processed_this_run += 1
+            if needs_rutube:
+                # Если загружали на Рутуб, то 1 за раз (лимит)
+                return True
+            
+            if processed_this_run >= 3:
+                # Если только соцсети - до 3 за раз
+                return True
 
     # Если мы здесь, значит все top-5 уже синхронизированы.
     if not videos:
