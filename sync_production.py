@@ -185,11 +185,11 @@ def get_full_video_info(y_id, metadata_cache=None):
         return metadata_cache[y_id]
     
     # Пытаемся разные комбинации клиентов для обхода блокировок
-    # ios и android клиенты сейчас самые стабильные
     clients = [
-        "ios,android,web", # Сначала пробуем всё сразу
-        "android",         # Затем чистый андроид
-        "ios"              # Затем чистый iOS (часто пробивает 403)
+        "web,ios,android", # Стандартный набор с имитацией браузера
+        "tv,web_embedded", # ТВ-клиенты (часто обходят "Sign in to confirm")
+        "android",         # Чистый андроид
+        "ios"              # Чистый iOS
     ]
 
     for attempt, client_list in enumerate(clients):
@@ -198,9 +198,10 @@ def get_full_video_info(y_id, metadata_cache=None):
                 YT_DLP_PATH, 
                 "--dump-json",
                 "--no-check-certificates",
+                "--impersonate", "chrome",  # Имитация браузера Chrome
                 "--extractor-args", f"youtube:player_client={client_list};player_skip=webpage,configs",
-                # Пытаемся использовать deno для JS если он доступен
-                "--js-runtimes", "deno"
+                "--js-runtimes", "deno",
+                "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
             ]
             
             if COOKIE_FILE:
@@ -211,7 +212,7 @@ def get_full_video_info(y_id, metadata_cache=None):
             
             cmd.append(f"https://youtube.com/watch?v={y_id}")
             
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=40)
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
             
             if res.returncode == 0:
                 data = json.loads(res.stdout)
@@ -220,7 +221,9 @@ def get_full_video_info(y_id, metadata_cache=None):
                 log(f"✅ Success with client {client_list}")
                 return data
             
-            log(f"⚠️ Client {client_list} failed: {res.stderr[:100]}...")
+            # Логируем конкретную ошибку для каждого метода
+            error_msg = res.stderr.split('\n')[0] if res.stderr else "Unknown error"
+            log(f"⚠️ Client {client_list} failed: {error_msg}")
             
         except Exception as e:
             log(f"⚠️ Error during metadata fetch: {e}")
@@ -234,14 +237,16 @@ def process_video(y_id, title, description, token):
     local_video_path = f"{local_file_base}.mp4"
     
     if not os.path.exists(local_video_path):
-        # Используем iOS клиент для скачивания, он меньше всего требует логина
+        # Используем самый надежный набор для скачивания
         yt_cmd = [
             YT_DLP_PATH, 
-            "-f", "best[ext=mp4]", 
+            "-f", "best[ext=mp4]/best", 
             "-o", f"{local_file_base}.%(ext)s",
             "--no-check-certificates",
-            "--extractor-args", "youtube:player_client=ios,android;player_skip=webpage,configs",
+            "--impersonate", "chrome",
+            "--extractor-args", "youtube:player_client=tv,ios,android;player_skip=webpage,configs",
             "--js-runtimes", "deno",
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
             "--retries", "3"
         ]
         
@@ -250,7 +255,7 @@ def process_video(y_id, title, description, token):
         
         yt_cmd.append(f"https://youtube.com/watch?v={y_id}")
         
-        log(f"😁 Скачивание через мобильные API (ios,android)...")
+        log(f"😁 Скачивание через усиленные API (tv,ios,android)...")
         result = subprocess.run(yt_cmd)
 
     if not os.path.exists(local_video_path) or os.path.getsize(local_video_path) == 0:

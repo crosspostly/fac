@@ -113,6 +113,7 @@ jobs:
       id: run_sync
       run: |
         set +e
+        set -o pipefail
         
         echo "🚀 [Attempt 1/2] Running sync_production.py..."
         xvfb-run python3 sync_production.py 2>&1 | tee /tmp/sync_attempt1.log
