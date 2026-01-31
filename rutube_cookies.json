@@ -1,0 +1,93 @@
+[
+    {
+        "domain": ".rutube.ru",
+        "expirationDate": 1768063617,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "session_id",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "25413400481767675936_1768058659609"
+    },
+    {
+        "domain": ".rutube.ru",
+        "expirationDate": 1772865245.332431,
+        "hostOnly": false,
+        "httpOnly": true,
+        "name": "refreshToken",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJydXBhc3NfaWQiOjcwMDE2NjAxLCJleHAiOjE3NzI4NjUyNDUsInJlcXVlc3RfaWQiOiI2ZDNlYWM1MS00ZWJlLTRhM2UtOWM3Yy03OGU2NjIzNGFlNDIifQ.Vc0rgk3312cvnHfbe7ea8AwjeEVMfQeSfv49U8W129o"
+    },
+    {
+        "domain": "studio.rutube.ru",
+        "expirationDate": 1802235934.226565,
+        "hostOnly": true,
+        "httpOnly": false,
+        "name": "spid",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "1767675934159_4e6d0baccdf4c03919678f2c9915039c_6g4js3phsbd5br03"
+    },
+    {
+        "domain": ".rutube.ru",
+        "expirationDate": 1802621817,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "cid",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "25413400481767675936"
+    },
+    {
+        "domain": ".rutube.ru",
+        "expirationDate": 1770273245.33129,
+        "hostOnly": false,
+        "httpOnly": true,
+        "name": "jwt",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJydXBhc3NfaWQiOjcwMDE2NjAxLCJlbWFpbF9jb25maXJtZWQiOnsidHlwZW9mIjoiYm9vbCIsInZhbHVlIjp0cnVlfSwiaGFzX3Bob25lIjp7InR5cGVvZiI6ImJvb2wiLCJ2YWx1ZSI6dHJ1ZX0sImV4cCI6MTc3MDI3MzI0NSwib3JpZ19pYXQiOjE3Njc2ODEyNDUsInVzZXJfaWQiOjc0NTIyNTg1LCJkYXRhIjp7InVzZXJfaW5mbyI6eyJpZCI6NzQ1MjI1ODV9fSwidXNlcm5hbWUiOiJubHBrZW1AeWEucnUiLCJlbWFpbCI6Im5scGtlbUB5YS5ydSIsIm5hbWUiOiJcdTA0MTFcdTA0NGJcdTA0NDFcdTA0NDJcdTA0NDBcdTA0NGJcdTA0MzUgXHUwNDQwXHUwNDM1XHUwNDQ2XHUwNDM1XHUwNDNmXHUwNDQyXHUwNDRiIFx1MDQzZFx1MDQzMCBcdTA0M2FcdTA0MzBcdTA0MzZcdTA0MzRcdTA0NGJcdTA0MzkgXHUwNDM0XHUwNDM1XHUwNDNkXHUwNDRjIn0.hmmeJ_vQgSmTvQ1_RbUr_fqNIGNQjlj5GTYJlIk5BJI"
+    },
+    {
+        "domain": ".rutube.ru",
+        "expirationDate": 1802621749,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "uuid",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "4fb50199-e1d1-48d8-9cba-bcc0fe2ce53b"
+    },
+    {
+        "domain": ".rutube.ru",
+        "expirationDate": 1772865245.332706,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "visitorID",
+        "path": "/",
+        "sameSite": "None",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "74522585"
+    }
+]
